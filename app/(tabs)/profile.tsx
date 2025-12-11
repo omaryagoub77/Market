@@ -13,6 +13,8 @@ import { db, auth } from '@/src/firebase';
 import { doc, updateDoc, collection, query, where, onSnapshot, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import * as ImagePicker from 'expo-image-picker';
+// Import user profile utilities
+import { getUserProfile, updateUserProfile } from '@/utils/userProfile';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -26,6 +28,12 @@ export default function ProfileScreen() {
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  // Additional user profile fields
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [location, setLocation] = useState('');
+  const [gender, setGender] = useState('');
+  const [age, setAge] = useState('');
 
   useEffect(() => {
     // Listen for auth state changes
@@ -35,16 +43,37 @@ export default function ProfileScreen() {
         setName(user.displayName || '');
         setEmail(user.email || '');
         setAvatarUrl(user.photoURL || 'https://picsum.photos/200/200?random=8');
+        
+        // Load additional user profile data
+        loadUserProfile(user.uid);
       } else {
         setCurrentUser(null);
         setName('');
         setEmail('');
+        setPhoneNumber('');
+        setLocation('');
+        setGender('');
+        setAge('');
       }
     });
 
     // Cleanup subscription on unmount
     return () => unsubscribeAuth();
   }, []);
+
+  const loadUserProfile = async (uid: string) => {
+    try {
+      const profile = await getUserProfile(uid);
+      if (profile) {
+        setPhoneNumber(profile.phoneNumber || '');
+        setLocation(profile.location || '');
+        setGender(profile.gender || '');
+        setAge(profile.age ? profile.age.toString() : '');
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  };
 
   useEffect(() => {
     // Fetch user's listings from Firestore
@@ -112,6 +141,24 @@ export default function ProfileScreen() {
       return;
     }
     
+    // Validate phone number (basic validation)
+    if (!phoneNumber.trim()) {
+      setError('Please enter a phone number');
+      return;
+    }
+    
+    // Validate age
+    if (!age.trim() || isNaN(Number(age)) || Number(age) <= 0) {
+      setError('Please enter a valid age');
+      return;
+    }
+    
+    // Validate gender
+    if (!gender.trim()) {
+      setError('Please select a gender');
+      return;
+    }
+    
     setIsSaving(true);
     setError('');
     
@@ -132,7 +179,17 @@ export default function ProfileScreen() {
         }
       }
       
-      // Update user profile in Firestore
+      // Update user profile in Firestore users collection
+      await updateUserProfile(currentUser.uid, {
+        fullname: name,
+        phoneNumber: phoneNumber,
+        location: location || undefined,
+        email: email,
+        gender: gender,
+        age: parseInt(age)
+      });
+      
+      // Update user profile in Firestore (legacy)
       const userRef = doc(db, 'users', currentUser.uid);
       await updateDoc(userRef, { 
         name: name,
@@ -169,6 +226,7 @@ export default function ProfileScreen() {
       setName(currentUser.displayName || '');
       setEmail(currentUser.email || '');
       setAvatarUrl(currentUser.photoURL || 'https://picsum.photos/200/200?random=8');
+      loadUserProfile(currentUser.uid);
     }
     setSelectedAvatar(null);
     setIsEditing(false);
@@ -242,6 +300,61 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Additional Profile Fields */}
+        {isEditing && (
+          <View style={styles.additionalFields}>
+            <Input
+              label="Phone Number"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              placeholder="Enter phone number"
+              keyboardType="phone-pad"
+              style={styles.inputField}
+            />
+            
+            <Input
+              label="Location (Optional)"
+              value={location}
+              onChangeText={setLocation}
+              placeholder="Enter location"
+              style={styles.inputField}
+            />
+            
+            <View style={styles.genderContainer}>
+              <ThemedText style={styles.label}>Gender</ThemedText>
+              <View style={styles.genderOptions}>
+                <TouchableOpacity 
+                  style={[styles.genderOption, gender === 'male' && styles.selectedGender]}
+                  onPress={() => setGender('male')}
+                >
+                  <ThemedText>Male</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.genderOption, gender === 'female' && styles.selectedGender]}
+                  onPress={() => setGender('female')}
+                >
+                  <ThemedText>Female</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.genderOption, gender === 'other' && styles.selectedGender]}
+                  onPress={() => setGender('other')}
+                >
+                  <ThemedText>Other</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <Input
+              label="Age"
+              value={age}
+              onChangeText={setAge}
+              placeholder="Enter age"
+              keyboardType="numeric"
+              style={styles.inputField}
+            />
+          </View>
+        )}
 
         {/* Action Buttons */}
         {isEditing ? (
@@ -377,6 +490,36 @@ const styles = StyleSheet.create({
   },
   editButton: {
     padding: Spacing.LIST_GAP,
+  },
+  additionalFields: {
+    marginBottom: Spacing.SECTION_GAP,
+  },
+  inputField: {
+    marginBottom: Spacing.LIST_GAP,
+  },
+  genderContainer: {
+    marginBottom: Spacing.LIST_GAP,
+  },
+  label: {
+    marginBottom: Spacing.LIST_GAP,
+    fontWeight: '600',
+  },
+  genderOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  genderOption: {
+    flex: 1,
+    padding: Spacing.LIST_GAP,
+    marginHorizontal: Spacing.LIST_GAP,
+    borderWidth: 1,
+    borderColor: Colors.GRAY_LIGHT,
+    borderRadius: Radii.BUTTON,
+    alignItems: 'center',
+  },
+  selectedGender: {
+    backgroundColor: Colors.PRIMARY_START,
+    borderColor: Colors.PRIMARY_START,
   },
   actionButtons: {
     flexDirection: 'row',

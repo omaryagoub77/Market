@@ -8,7 +8,9 @@ import { StarRating } from '@/components/ui/star-rating';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
 import { db } from '@/src/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
+import { createOrGetChatRoom } from '@/utils/chatUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -21,6 +23,10 @@ export default function ProductDetailScreen() {
   
   // Get productId from route params
   const { productId } = useLocalSearchParams();
+  // Initialize router for navigation
+  const router = useRouter();
+  // Get current user
+  const { user } = useAuth();
 
   // Validate productId
   useEffect(() => {
@@ -57,6 +63,35 @@ export default function ProductDetailScreen() {
     
     return () => unsubscribe();
   }, [productId]);
+
+  // Handle contact seller button press
+  const handleContactSeller = async () => {
+    // Check if user is logged in
+    if (!user) {
+      // Store the current page as redirect URL and go to login
+      router.push('/auth/login');
+      return;
+    }
+    
+    // Navigate to chat room with seller ID
+    if (product && product.ownerId) {
+      // Create or get chat room before navigating
+      try {
+        const chatId = await createOrGetChatRoom(user.uid, product.ownerId);
+        router.push({
+          pathname: "/(tabs)/chat-room",
+          params: { sellerId: product.ownerId, chatId, productId: product.id }
+        });
+      } catch (error) {
+        console.error('Error creating chat room:', error);
+        // Fallback to navigation without chatId
+        router.push({
+          pathname: "/(tabs)/chat-room",
+          params: { sellerId: product.ownerId, productId: product.id }
+        });
+      }
+    }
+  };
 
   if (loading) {
     return (
@@ -171,7 +206,7 @@ export default function ProductDetailScreen() {
             <Button 
               title="Contact Seller" 
               variant="secondary" 
-              onPress={() => console.log('Contact seller')}
+              onPress={handleContactSeller}
               style={styles.contactButton}
             />
             <Button 

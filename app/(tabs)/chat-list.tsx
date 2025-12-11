@@ -7,7 +7,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
 import { db, auth } from '@/src/firebase';
-import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, limit, doc, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
@@ -32,60 +32,128 @@ export default function ChatListScreen() {
     return () => unsubscribeAuth();
   }, []);
 
-  // Fetch chat data from Firestore
+  // Fetch real chat data from Firestore using onSnapshot
   useEffect(() => {
     if (!currentUser) {
       return;
     }
 
-    // In a real app, you would fetch actual chat conversations
-    // This is just mock data for demonstration
-    const mockChats = [
-      {
-        id: '1',
-        name: 'John Doe',
-        lastMessage: 'Hey, how much for the iPhone?',
-        timestamp: new Date(Date.now() - 3600000), // 1 hour ago
-        unread: 2,
-        avatar: 'https://picsum.photos/200/200?random=1',
-      },
-      {
-        id: '2',
-        name: 'Jane Smith',
-        lastMessage: 'Is this still available?',
-        timestamp: new Date(Date.now() - 86400000), // 1 day ago
-        unread: 0,
-        avatar: 'https://picsum.photos/200/200?random=2',
-      },
-      {
-        id: '3',
-        name: 'Mike Johnson',
-        lastMessage: 'Thanks for the quick response!',
-        timestamp: new Date(Date.now() - 172800000), // 2 days ago
-        unread: 0,
-        avatar: 'https://picsum.photos/200/200?random=3',
-      },
-    ];
+    // Listen for chat rooms where the current user is a participant
+    const chatsQuery = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', currentUser.uid)
+    );
 
-    setChatData(mockChats);
-    setLoading(false);
+    const unsubscribe = onSnapshot(chatsQuery,
+      async (snapshot) => {
+        const chatsPromises = snapshot.docChanges().map(async (change) => {
+          const chatData = change.doc.data();
+          const chatId = change.doc.id;
+          
+          // Find the other participant (not the current user)
+          const otherParticipantId = chatData.participants.find((id: string) => id !== currentUser.uid);
+          
+          if (otherParticipantId) {
+            // Fetch the latest message in this chat
+            const messagesQuery = query(
+              collection(db, 'chats', chatId, 'messages'),
+              orderBy('timestamp', 'desc'),
+              limit(1)
+            );
+            
+            // Use getDocs for queries
+            const messagesSnapshot = await getDocs(messagesQuery);
+            let lastMessage = null;
+            let timestamp = new Date();
+            
+            if (!messagesSnapshot.empty) {
+              const messageDoc = messagesSnapshot.docs[0];
+              const messageData = messageDoc.data();
+              lastMessage = messageData.text;
+              timestamp = messageData.timestamp?.toDate() || new Date();
+            }
+            
+            // Fetch user info for the other participant
+            // In a real app, you'd have a users collection
+            const otherUserName = `User ${otherParticipantId.substring(0, 6)}`;
+            const otherUserAvatar = `https://picsum.photos/200/200?random=${Math.floor(Math.random() * 100)}`;
+            
+            return {
+              id: chatId,
+              name: otherUserName,
+              lastMessage,
+              timestamp,
+              unread: 0, // In a real app, you'd track unread messages
+              avatar: otherUserAvatar,
+              otherUserId: otherParticipantId
+            };
+          }
+          return null;
+        });
+        
+        const chatsResults = await Promise.all(chatsPromises);
+        const validChats = chatsResults.filter(chat => chat !== null);
+        
+        // Update chat data based on the type of change
+        setChatData(prevChats => {
+          const updatedChats = [...prevChats];
+          
+          snapshot.docChanges().forEach((change, index) => {
+            const chat = validChats[index];
+            if (!chat) return;
+            
+            const existingIndex = updatedChats.findIndex(c => c.id === chat.id);
+            
+            if (change.type === 'added') {
+              if (existingIndex === -1) {
+                updatedChats.unshift(chat); // Add to the beginning
+              }
+            } else if (change.type === 'modified') {
+              if (existingIndex !== -1) {
+                updatedChats[existingIndex] = chat;
+              }
+            } else if (change.type === 'removed') {
+              if (existingIndex !== -1) {
+                updatedChats.splice(existingIndex, 1);
+              }
+            }
+          });
+          
+          return updatedChats;
+        });
+        
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching chats:', error);
+        setError('Failed to load chats. Please try again later.');
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [currentUser]);
 
-  const handleChatPress = (chatId: string) => {
-    router.push(`/chat-room?id=${chatId}`);
+  const handleChatPress = (otherUserId: string, chatId: string) => {
+    router.push({
+      pathname: '/(tabs)/chat-room',
+      params: { sellerId: otherUserId, chatId }
+    });
   };
 
   const renderChatItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
       style={styles.chatItem}
-      onPress={() => handleChatPress(item.id)}
+      onPress={() => handleChatPress(item.otherUserId, item.id)}
     >
       <Avatar source={item.avatar} size={56} />
       <View style={styles.chatInfo}>
         <ThemedText type="defaultSemiBold">{item.name}</ThemedText>
-        <ThemedText style={styles.lastMessage} numberOfLines={1}>
-          {item.lastMessage}
-        </ThemedText>
+        {item.lastMessage && (
+          <ThemedText style={styles.lastMessage} numberOfLines={1}>
+            {item.lastMessage}
+          </ThemedText>
+        )}
       </View>
       <View style={styles.chatMeta}>
         <ThemedText style={styles.timestamp}>
@@ -125,6 +193,9 @@ export default function ChatListScreen() {
               <ThemedText style={styles.emptyText}>No conversations yet</ThemedText>
               <ThemedText style={styles.emptySubtext}>
                 Start chatting with sellers and buyers
+              </ThemedText>
+              <ThemedText style={styles.emptySubtext}>
+                Chats will appear here when you contact sellers
               </ThemedText>
             </View>
           }

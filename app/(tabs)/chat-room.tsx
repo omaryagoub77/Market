@@ -1,26 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Avatar } from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
 import { db, auth } from '@/src/firebase';
-import { collection, query, orderBy, onSnapshot, where, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, addDoc, serverTimestamp, limit, doc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { createOrGetChatRoom } from '@/utils/chatUtils';
 
 export default function ChatRoomScreen() {
   const router = useRouter();
+  // Get sellerId and chatId from route params
+  const { sellerId, chatId } = useLocalSearchParams();
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<any[]>([]); // In a real app, this would come from Firestore
+  const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [chatRoomId, setChatRoomId] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
-  // In a real app, you would get the chat ID from route params
-  const chatId = 'CHAT_ID'; // This would come from route params
 
   // Listen for auth state changes
   useEffect(() => {
@@ -36,15 +38,40 @@ export default function ChatRoomScreen() {
     return () => unsubscribeAuth();
   }, []);
 
+  // Generate or use existing chat ID
+  useEffect(() => {
+    if (!currentUser || !sellerId) return;
+
+    // If chatId was passed from chat list, use it
+    if (chatId && typeof chatId === 'string') {
+      setChatRoomId(chatId);
+      return;
+    }
+
+    // Otherwise, create or get chat room
+    const initializeChat = async () => {
+      try {
+        const newChatId = await createOrGetChatRoom(currentUser.uid, sellerId as string);
+        setChatRoomId(newChatId);
+      } catch (error) {
+        console.error('Error initializing chat:', error);
+        setError('Failed to initialize chat. Please try again.');
+        setLoading(false);
+      }
+    };
+
+    initializeChat();
+  }, [currentUser, sellerId, chatId]);
+
   // Fetch messages from Firestore based on chat ID
   useEffect(() => {
-    if (!chatId || !currentUser) {
+    if (!chatRoomId || !currentUser) {
       return;
     }
 
     const messagesQuery = query(
-      collection(db, 'chats', chatId, 'messages'),
-      orderBy('timestamp', 'desc'),
+      collection(db, 'chats', chatRoomId, 'messages'),
+      orderBy('timestamp', 'asc'),
       limit(50)
     );
     
@@ -56,6 +83,11 @@ export default function ChatRoomScreen() {
         }));
         setMessages(messagesData);
         setLoading(false);
+        
+        // Scroll to bottom when new messages arrive
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
       },
       (error) => {
         console.error('Error fetching messages:', error);
@@ -65,13 +97,31 @@ export default function ChatRoomScreen() {
     );
     
     return () => unsubscribe();
-  }, [chatId, currentUser]);
+  }, [chatRoomId, currentUser]);
+
+  // Update chat room timestamp when user opens the chat
+  useEffect(() => {
+    if (!chatRoomId || !currentUser) return;
+
+    const updateChatTimestamp = async () => {
+      try {
+        const chatRef = doc(db, 'chats', chatRoomId);
+        await updateDoc(chatRef, {
+          updatedAt: new Date()
+        });
+      } catch (error) {
+        console.error('Error updating chat timestamp:', error);
+      }
+    };
+
+    updateChatTimestamp();
+  }, [chatRoomId, currentUser]);
 
   const handleSend = async () => {
-    if (!message.trim() || !currentUser) return;
+    if (!message.trim() || !currentUser || !chatRoomId) return;
 
     try {
-      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      await addDoc(collection(db, 'chats', chatRoomId, 'messages'), {
         text: message.trim(),
         senderId: currentUser.uid,
         senderName: currentUser.displayName || 'Anonymous',
@@ -79,6 +129,12 @@ export default function ChatRoomScreen() {
       });
 
       setMessage('');
+      
+      // Update chat room timestamp when sending a message
+      const chatRef = doc(db, 'chats', chatRoomId);
+      await updateDoc(chatRef, {
+        updatedAt: new Date()
+      });
     } catch (error) {
       console.error('Error sending message:', error);
       setError('Failed to send message. Please try again.');
@@ -132,7 +188,8 @@ export default function ChatRoomScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.messagesContainer}
-          inverted
+          inverted={false}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
 
         <KeyboardAvoidingView 

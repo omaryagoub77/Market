@@ -1,129 +1,186 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Image, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Image, Dimensions, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 import { StarRating } from '@/components/ui/star-rating';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
+import { db } from '@/src/firebase';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { useLocalSearchParams } from 'expo-router';
 
 const { width } = Dimensions.get('window');
-
-// Mock product data
-const product = {
-  id: '1',
-  title: 'Wireless Headphones',
-  price: '$99.99',
-  description: 'High-quality wireless headphones with noise cancellation and 30-hour battery life.',
-  images: [
-    'https://picsum.photos/600/600?random=1',
-    'https://picsum.photos/600/600?random=2',
-    'https://picsum.photos/600/600?random=3',
-  ],
-  rating: 4.5,
-  reviewCount: 128,
-  sizes: ['S', 'M', 'L', 'XL'],
-  seller: 'TechStore',
-};
 
 export default function ProductDetailScreen() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState('M');
+  const [product, setProduct] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  
+  // Get productId from route params
+  const { productId } = useLocalSearchParams();
+
+  // Validate productId
+  useEffect(() => {
+    if (!productId || typeof productId !== "string") {
+      setError("Invalid product ID");
+      setLoading(false);
+      return;
+    }
+  }, [productId]);
+
+  // Fetch the actual product from Firestore
+  useEffect(() => {
+    // Skip if productId is invalid
+    if (!productId || typeof productId !== "string") {
+      return;
+    }
+
+    const productRef = doc(db, 'products', productId);
+    const unsubscribe = onSnapshot(productRef,
+      (doc) => {
+        if (doc.exists()) {
+          setProduct({ id: doc.id, ...doc.data() });
+        } else {
+          setError('Product not found');
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching product:', error);
+        setError('Failed to load product details. Please try again later.');
+        setLoading(false);
+      }
+    );
+    
+    return () => unsubscribe();
+  }, [productId]);
+
+  if (loading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.PRIMARY_START} />
+          <ThemedText style={styles.loadingText}>Loading product details...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <ThemedText style={styles.errorText}>{error || 'Product not found'}</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
-      {/* Product Images */}
-      <ScrollView 
-        horizontal 
-        pagingEnabled 
-        showsHorizontalScrollIndicator={false}
-        style={styles.imageSlider}
-        onScroll={(event) => {
-          const index = Math.round(event.nativeEvent.contentOffset.x / width);
-          setSelectedImageIndex(index);
-        }}
-      >
-        {product.images.map((image, index) => (
-          <Image 
-            key={index} 
-            source={{ uri: image }} 
-            style={styles.productImage} 
-          />
-        ))}
-      </ScrollView>
+      <ScrollView>
+        {/* Product Images */}
+        <View style={styles.imageSliderContainer}>
+          <ScrollView 
+            horizontal 
+            pagingEnabled 
+            showsHorizontalScrollIndicator={false}
+            style={styles.imageSlider}
+            onScroll={(event) => {
+              const index = Math.round(event.nativeEvent.contentOffset.x / width);
+              setSelectedImageIndex(index);
+            }}
+          >
+            {product.images?.map((image: string, index: number) => (
+              <Image 
+                key={index} 
+                source={{ uri: image }} 
+                style={styles.productImage} 
+              />
+            ))}
+          </ScrollView>
 
-      {/* Image Indicators */}
-      <View style={styles.indicatorContainer}>
-        {product.images.map((_, index) => (
-          <View 
-            key={index} 
-            style={[
-              styles.indicator, 
-              index === selectedImageIndex && styles.activeIndicator
-            ]} 
-          />
-        ))}
-      </View>
-
-      {/* Product Info */}
-      <ScrollView style={styles.contentContainer}>
-        <ThemedText type="title" style={styles.title}>
-          {product.title}
-        </ThemedText>
-
-        <View style={styles.priceRatingContainer}>
-          <ThemedText type="subtitle" style={styles.price}>
-            {product.price}
-          </ThemedText>
-          <View style={styles.ratingContainer}>
-            <StarRating rating={product.rating} size={16} />
-            <ThemedText style={styles.reviewCount}>
-              ({product.reviewCount})
-            </ThemedText>
+          {/* Image Indicators */}
+          <View style={styles.indicatorContainer}>
+            {product.images?.map((_: string, index: number) => (
+              <View 
+                key={index} 
+                style={[
+                  styles.indicator, 
+                  index === selectedImageIndex && styles.activeIndicator
+                ]} 
+              />
+            ))}
           </View>
         </View>
 
-        <ThemedText style={styles.description}>
-          {product.description}
-        </ThemedText>
+        {/* Product Info */}
+        <View style={styles.contentContainer}>
+          <ThemedText type="title" style={styles.title}>
+            {product.title}
+          </ThemedText>
 
-        {/* Size Selection */}
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Size
-        </ThemedText>
-        <View style={styles.sizeContainer}>
-          {product.sizes.map((size) => (
-            <Chip
-              key={size}
-              title={size}
-              selected={selectedSize === size}
-              onPress={() => setSelectedSize(size)}
+          <View style={styles.priceRatingContainer}>
+            <ThemedText type="subtitle" style={styles.price}>
+              ${product.price}
+            </ThemedText>
+            <View style={styles.ratingContainer}>
+              <StarRating rating={product.rating || 0} size={16} />
+              <ThemedText style={styles.reviewCount}>
+                ({product.reviewCount || 0})
+              </ThemedText>
+            </View>
+          </View>
+
+          <ThemedText style={styles.description}>
+            {product.description}
+          </ThemedText>
+
+          {/* Size Selection */}
+          {product.sizes && product.sizes.length > 0 && (
+            <>
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
+                Size
+              </ThemedText>
+              <View style={styles.sizeContainer}>
+                {product.sizes.map((size: string) => (
+                  <Chip
+                    key={size}
+                    title={size}
+                    selected={selectedSize === size}
+                    onPress={() => setSelectedSize(size)}
+                  />
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Seller Info */}
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Seller
+          </ThemedText>
+          <ThemedText style={styles.sellerName}>
+            {product.ownerName || 'Unknown Seller'}
+          </ThemedText>
+
+          {/* Action Buttons */}
+          <View style={styles.buttonContainer}>
+            <Button 
+              title="Contact Seller" 
+              variant="secondary" 
+              onPress={() => console.log('Contact seller')}
+              style={styles.contactButton}
             />
-          ))}
+            <Button 
+              title="Add to Cart" 
+              onPress={() => console.log('Add to cart')}
+            />
+          </View>
         </View>
-
-        {/* Seller Info */}
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Seller
-        </ThemedText>
-        <ThemedText style={styles.sellerName}>
-          {product.seller}
-        </ThemedText>
       </ScrollView>
-
-      {/* Action Buttons */}
-      <View style={styles.buttonContainer}>
-        <Button 
-          title="Contact Seller" 
-          variant="secondary" 
-          onPress={() => console.log('Contact seller')}
-          style={styles.contactButton}
-        />
-        <Button 
-          title="Add to Cart" 
-          onPress={() => console.log('Add to cart')}
-        />
-      </View>
     </ThemedView>
   );
 }
@@ -132,6 +189,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.BG_LIGHT,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: Spacing.LIST_GAP,
+    color: Colors.GRAY_MED,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: Colors.ALERT_RED,
+    textAlign: 'center',
+  },
+  imageSliderContainer: {
+    height: Dimensions.get('window').height * 0.55,
+    position: 'relative',
   },
   imageSlider: {
     height: Dimensions.get('window').height * 0.55,
@@ -157,7 +236,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.PRIMARY_START,
   },
   contentContainer: {
-    flex: 1,
     padding: Spacing.SCREEN_PADDING,
   },
   title: {
@@ -196,8 +274,9 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: 'row',
-    padding: Spacing.SCREEN_PADDING,
     gap: Spacing.LIST_GAP,
+    marginTop: Spacing.SECTION_GAP,
+    marginBottom: Spacing.SECTION_GAP,
   },
   contactButton: {
     flex: 1,

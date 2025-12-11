@@ -1,14 +1,32 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { Colors } from '@/constants/theme';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { BottomNav, Colors as ThemeColors } from '@/src/theme'; // Import theme
+import { BottomNav, Colors as ThemeColors } from '@/src/theme';
+
+// Simple loading screen
+const LoadingScreen = () => (
+  <View style={styles.loadingContainer}>
+    <ActivityIndicator size="large" color={ThemeColors.PRIMARY_START} />
+  </View>
+);
 
 export default function TabLayout() {
+  const { user, loading } = useAuth();
   const colorScheme = useColorScheme();
+
+  // Show loading indicator while checking auth state
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  // If not authenticated, redirect to login (this is handled by the ProtectedRoute)
+  // But we still want to show the tabs for authenticated users
 
   return (
     <Tabs
@@ -17,42 +35,51 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          height: BottomNav.HEIGHT, // Using theme height
-          backgroundColor: ThemeColors.BLACK, // Using theme color
-          borderTopLeftRadius: BottomNav.RADIUS, // Using theme radius
-          borderTopRightRadius: BottomNav.RADIUS, // Using theme radius
-          paddingBottom: 10, // Using theme spacing
-          paddingTop: 10, // Using theme spacing
+          height: BottomNav.HEIGHT,
+          backgroundColor: ThemeColors.BLACK,
+          borderTopLeftRadius: BottomNav.RADIUS,
+          borderTopRightRadius: BottomNav.RADIUS,
+          paddingBottom: 10,
+          paddingTop: 10,
         },
       }}>
       <Tabs.Screen
         name="home-feed"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="house.fill" color={color} />, // Using theme icon size
+          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="post-item"
         options={{
           title: 'Post',
-          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="plus.circle.fill" color={color} />, // Using theme icon size
+          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="plus.circle.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="chat-list"
         options={{
           title: 'Messages',
-          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="message.fill" color={color} />, // Using theme icon size
+          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="message.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="person.fill" color={color} />, // Using theme icon size
+          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="person.fill" color={color} />,
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: ThemeColors.BG_LIGHT,
+  },
+});

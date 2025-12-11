@@ -5,20 +5,33 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
+import { auth } from '@/src/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleResetPassword = () => {
+  const handleResetPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address');
+      return;
+    }
+    
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      console.log('Resetting password for:', email);
-      setIsLoading(false);
+    setError('');
+    
+    try {
+      await sendPasswordResetEmail(auth, email);
       setIsSent(true);
-    }, 1000);
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+      setError(error.message || 'Failed to send reset email. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -32,6 +45,8 @@ export default function ForgotPasswordScreen() {
             ? 'We have sent a password reset link to your email address.' 
             : 'Enter your email to receive a reset link'}
         </ThemedText>
+
+        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
 
         {!isSent ? (
           <View style={styles.form}>
@@ -86,6 +101,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.GRAY_MED,
     marginBottom: Spacing.SECTION_GAP,
+  },
+  errorText: {
+    color: Colors.ALERT_RED,
+    textAlign: 'center',
+    marginBottom: Spacing.LIST_GAP,
   },
   form: {
     marginBottom: Spacing.SECTION_GAP,

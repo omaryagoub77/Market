@@ -33,6 +33,8 @@ export const Shadows = {
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
+    // Web compatibility
+    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.10)"
   },
   MED: {
     shadowColor: "#000",
@@ -40,6 +42,8 @@ export const Shadows = {
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
+    // Web compatibility
+    boxShadow: "0 6px 22px rgba(0, 0, 0, 0.12)"
   }
 };
 

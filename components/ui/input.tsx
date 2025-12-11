@@ -1,6 +1,18 @@
 import React from 'react';
-import { TextInput, StyleSheet, View, TextInputProps } from 'react-native';
+import { TextInput, StyleSheet, View, TextInputProps, Platform } from 'react-native';
 import { Colors, Radii, Shadows, Spacing } from '@/src/theme';
+
+// Helper function to apply platform-specific shadows
+const getShadowStyle = (shadowType: typeof Shadows.SOFT) => {
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow: shadowType.boxShadow
+    };
+  } else {
+    const { boxShadow, ...nativeShadows } = shadowType;
+    return nativeShadows;
+  }
+};
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -11,7 +23,7 @@ export function Input({ label, style, ...props }: InputProps) {
     <View style={styles.container}>
       {label && <TextInput style={styles.label} value={label} editable={false} />}
       <TextInput
-        style={[styles.input, style]}
+        style={[styles.input, getShadowStyle(Shadows.SOFT), style]}
         placeholderTextColor={Colors.GRAY_MED}
         {...props}
       />
@@ -34,7 +46,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.BG_LIGHT,
     borderRadius: Radii.BUTTON,
     paddingHorizontal: Spacing.COMPONENT,
-    ...Shadows.SOFT,
     color: Colors.TEXT,
     fontSize: 16,
   },

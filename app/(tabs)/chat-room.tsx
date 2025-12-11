@@ -1,117 +1,165 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Avatar } from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
-
-// Mock data
-const messages = [
-  {
-    id: '1',
-    text: 'Hi there! Is this still available?',
-    sender: 'Alice',
-    timestamp: '10:30 AM',
-    isOwn: false,
-  },
-  {
-    id: '2',
-    text: 'Yes, it is! Would you like to meet up?',
-    sender: 'Me',
-    timestamp: '10:32 AM',
-    isOwn: true,
-  },
-  {
-    id: '3',
-    text: 'Sure, I can meet tomorrow afternoon',
-    sender: 'Alice',
-    timestamp: '10:35 AM',
-    isOwn: false,
-  },
-  {
-    id: '4',
-    text: 'Great! How about 2 PM at the coffee shop downtown?',
-    sender: 'Me',
-    timestamp: '10:36 AM',
-    isOwn: true,
-  },
-];
+import { db, auth } from '@/src/firebase';
+import { collection, query, orderBy, onSnapshot, where, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function ChatRoomScreen() {
+  const router = useRouter();
   const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<any[]>([]); // In a real app, this would come from Firestore
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const flatListRef = useRef<FlatList>(null);
+  // In a real app, you would get the chat ID from route params
+  const chatId = 'CHAT_ID'; // This would come from route params
 
-  const handleSend = () => {
-    if (message.trim()) {
-      console.log('Sending message:', message);
+  // Listen for auth state changes
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user: any) => {
+      if (user) {
+        setCurrentUser(user);
+      } else {
+        setCurrentUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  // Fetch messages from Firestore based on chat ID
+  useEffect(() => {
+    if (!chatId || !currentUser) {
+      return;
+    }
+
+    const messagesQuery = query(
+      collection(db, 'chats', chatId, 'messages'),
+      orderBy('timestamp', 'desc'),
+      limit(50)
+    );
+    
+    const unsubscribe = onSnapshot(messagesQuery, 
+      (snapshot) => {
+        const messagesData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setMessages(messagesData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching messages:', error);
+        setError('Failed to load messages. Please try again later.');
+        setLoading(false);
+      }
+    );
+    
+    return () => unsubscribe();
+  }, [chatId, currentUser]);
+
+  const handleSend = async () => {
+    if (!message.trim() || !currentUser) return;
+
+    try {
+      await addDoc(collection(db, 'chats', chatId, 'messages'), {
+        text: message.trim(),
+        senderId: currentUser.uid,
+        senderName: currentUser.displayName || 'Anonymous',
+        timestamp: serverTimestamp(),
+      });
+
       setMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setError('Failed to send message. Please try again.');
     }
   };
 
-  const renderMessage = ({ item }: { item: typeof messages[0] }) => (
-    <View style={[styles.messageContainer, item.isOwn ? styles.ownMessageContainer : styles.otherMessageContainer]}>
-      {!item.isOwn && (
-        <Avatar 
-          source="https://picsum.photos/200/200?random=9" 
-          size={32} 
-        />
-      )}
-      <View style={[styles.messageBubble, item.isOwn ? styles.ownBubble : styles.otherBubble]}>
-        {!item.isOwn && (
-          <ThemedText style={styles.senderName}>{item.sender}</ThemedText>
+  const renderMessage = ({ item }: { item: any }) => {
+    const isCurrentUser = item.senderId === currentUser?.uid;
+    
+    return (
+      <View style={[
+        styles.messageContainer,
+        isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage
+      ]}>
+        {!isCurrentUser && (
+          <Avatar 
+            source={item.senderAvatar || 'https://picsum.photos/200/200?random=5'} 
+            size={32} 
+          />
         )}
-        <ThemedText style={styles.messageText}>{item.text}</ThemedText>
-        <ThemedText style={styles.messageTimestamp}>{item.timestamp}</ThemedText>
+        <View style={[
+          styles.messageBubble,
+          isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble
+        ]}>
+          {!isCurrentUser && (
+            <ThemedText style={styles.senderName}>{item.senderName}</ThemedText>
+          )}
+          <ThemedText style={styles.messageText}>{item.text}</ThemedText>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
+
+  if (loading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.PRIMARY_START} />
+          <ThemedText style={styles.loadingText}>Loading chat...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
-    <ThemedView style={styles.container}>
-      {/* Chat Header */}
-      <View style={styles.header}>
-        <Avatar 
-          source="https://picsum.photos/200/200?random=9" 
-          size={40} 
+    <ProtectedRoute redirectTo="/(tabs)/chat-room">
+      <ThemedView style={styles.container}>
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.messagesContainer}
+          inverted
         />
-        <View style={styles.headerInfo}>
-          <ThemedText type="defaultSemiBold">Alice Johnson</ThemedText>
-          <ThemedText style={styles.onlineStatus}>Online</ThemedText>
-        </View>
-        <TouchableOpacity>
-          <IconSymbol name="phone.fill" size={24} color={Colors.ICON} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerIcon}>
-          <IconSymbol name="video.fill" size={24} color={Colors.ICON} />
-        </TouchableOpacity>
-      </View>
 
-      {/* Messages */}
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={styles.messagesContainer}
-        inverted
-      />
-
-      {/* Message Input */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Type a message..."
-          placeholderTextColor={Colors.GRAY_MED}
-        />
-        <TouchableOpacity 
-          style={styles.sendButton}
-          onPress={handleSend}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.inputContainer}
         >
-          <IconSymbol name="paperplane.fill" size={20} color={Colors.BG_LIGHT} />
-        </TouchableOpacity>
-      </View>
-    </ThemedView>
+          <TextInput
+            style={styles.textInput}
+            value={message}
+            onChangeText={setMessage}
+            placeholder="Type a message..."
+            multiline
+          />
+          <TouchableOpacity 
+            style={styles.sendButton}
+            onPress={handleSend}
+            disabled={!message.trim()}
+          >
+            <IconSymbol 
+              name="paperplane.fill" 
+              size={20} 
+              color={message.trim() ? Colors.BG_LIGHT : Colors.GRAY_MED} 
+            />
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </ThemedView>
+    </ProtectedRoute>
   );
 }
 
@@ -120,86 +168,69 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.BG_LIGHT,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.COMPONENT,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.GRAY_LIGHT,
-  },
-  headerInfo: {
+  loadingContainer: {
     flex: 1,
-    marginLeft: Spacing.LIST_GAP,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  onlineStatus: {
-    color: Colors.PRIMARY_START,
-    fontSize: 12,
-  },
-  headerIcon: {
-    marginLeft: Spacing.COMPONENT,
+  loadingText: {
+    marginTop: Spacing.LIST_GAP,
+    color: Colors.GRAY_MED,
   },
   messagesContainer: {
     padding: Spacing.SCREEN_PADDING,
   },
   messageContainer: {
     flexDirection: 'row',
-    marginBottom: Spacing.LIST_GAP,
+    marginVertical: Spacing.LIST_GAP,
   },
-  ownMessageContainer: {
+  currentUserMessage: {
     justifyContent: 'flex-end',
   },
-  otherMessageContainer: {
+  otherUserMessage: {
     justifyContent: 'flex-start',
   },
   messageBubble: {
     maxWidth: '80%',
-    padding: Spacing.COMPONENT,
+    padding: Spacing.LIST_GAP,
     borderRadius: Radii.BUTTON,
-    ...Shadows.SOFT,
   },
-  ownBubble: {
+  currentUserBubble: {
     backgroundColor: Colors.PRIMARY_START,
     marginLeft: Spacing.COMPONENT,
   },
-  otherBubble: {
-    backgroundColor: Colors.BG_ALT,
+  otherUserBubble: {
+    backgroundColor: Colors.GRAY_LIGHT,
     marginRight: Spacing.COMPONENT,
   },
   senderName: {
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 4,
   },
   messageText: {
     color: Colors.TEXT,
   },
-  messageTimestamp: {
-    fontSize: 10,
-    color: Colors.GRAY_MED,
-    marginTop: 4,
-    textAlign: 'right',
-  },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     padding: Spacing.SCREEN_PADDING,
-    backgroundColor: Colors.BG_LIGHT,
+    paddingBottom: Spacing.COMPONENT,
   },
   textInput: {
     flex: 1,
-    height: 56,
-    backgroundColor: Colors.BG_ALT,
+    borderWidth: 1,
+    borderColor: Colors.GRAY_LIGHT,
     borderRadius: Radii.BUTTON,
-    paddingHorizontal: Spacing.COMPONENT,
-    ...Shadows.SOFT,
-    color: Colors.TEXT,
+    padding: Spacing.LIST_GAP,
+    maxHeight: 100,
+    marginRight: Spacing.LIST_GAP,
   },
   sendButton: {
-    width: 56,
-    height: 56,
+    backgroundColor: Colors.PRIMARY_START,
+    width: 40,
+    height: 40,
     borderRadius: Radii.CIRCLE,
-    backgroundColor: Colors.BLACK,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: Spacing.LIST_GAP,
   },
 });

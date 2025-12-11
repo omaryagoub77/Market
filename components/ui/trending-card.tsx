@@ -1,22 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, Image, TouchableOpacity, Platform } from 'react-native';
+import { View, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radii, Shadows, Spacing } from '@/src/theme';
 import { StarRating } from '@/components/ui/star-rating';
 
-// Helper function to apply platform-specific shadows
-const getShadowStyle = (shadowType: typeof Shadows.SOFT) => {
-  if (Platform.OS === 'web') {
-    return {
-      boxShadow: shadowType.boxShadow
-    };
-  } else {
-    const { boxShadow, ...nativeShadows } = shadowType;
-    return nativeShadows;
-  }
-};
-
-interface ProductCardProps {
+interface TrendingCardProps {
   title: string;
   price: string;
   imageUrl: string;
@@ -25,16 +13,16 @@ interface ProductCardProps {
   onPress: () => void;
 }
 
-export function ProductCard({ title, price, imageUrl, sellerName, rating, onPress }: ProductCardProps) {
+export function TrendingCard({ title, price, imageUrl, sellerName, rating, onPress }: TrendingCardProps) {
   return (
-    <TouchableOpacity style={[styles.container, getShadowStyle(Shadows.SOFT)]} onPress={onPress} activeOpacity={0.9}>
+    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.9}>
       <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="cover" />
       <View style={styles.content}>
-        <ThemedText type="defaultSemiBold" numberOfLines={1}>
+        <ThemedText type="defaultSemiBold" numberOfLines={1} style={styles.title}>
           {title}
         </ThemedText>
         {sellerName && (
-          <ThemedText style={styles.sellerName}>
+          <ThemedText style={styles.sellerName} numberOfLines={1}>
             by {sellerName}
           </ThemedText>
         )}
@@ -54,27 +42,33 @@ export function ProductCard({ title, price, imageUrl, sellerName, rating, onPres
 const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.BG_LIGHT,
-    borderRadius: Radii.CARD,
+    borderRadius: 20, // Slightly smaller radius for trending cards
+    ...Shadows.SOFT,
     overflow: 'hidden',
-    width: '100%',
+    width: 160, // Fixed width for trending cards
+    height: 200, // Fixed height for trending cards
   },
   image: {
     width: '100%',
-    height: 150,
+    height: 100, // Smaller image height for trending cards
   },
   content: {
-    padding: Spacing.COMPONENT,
+    padding: Spacing.LIST_GAP, // Smaller padding for trending cards
+  },
+  title: {
+    fontSize: 14, // Smaller font for trending cards
   },
   sellerName: {
     color: Colors.GRAY_MED,
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 10, // Smaller font for seller name
+    marginTop: 2,
   },
   ratingContainer: {
-    marginVertical: 4,
+    marginVertical: 2,
   },
   price: {
     color: Colors.PRIMARY_START,
-    marginTop: 4,
+    fontSize: 14, // Smaller font for price
+    marginTop: 2,
   },
 });

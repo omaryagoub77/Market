@@ -1,76 +1,204 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { StarRating } from '@/components/ui/star-rating';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
+import { db } from '@/src/firebase';
+import { collection, query, orderBy, limit, onSnapshot, addDoc, where, doc, updateDoc, increment, getDoc } from 'firebase/firestore';
+import { useLocalSearchParams } from 'expo-router';
 
-// Mock data
-const reviews = [
-  {
-    id: '1',
-    user: {
-      name: 'Alice Johnson',
-      avatar: 'https://picsum.photos/200/200?random=12',
-    },
-    rating: 5,
-    comment: 'Great product! Exactly as described. Fast shipping too.',
-    date: '2023-05-15',
-  },
-  {
-    id: '2',
-    user: {
-      name: 'Bob Smith',
-      avatar: 'https://picsum.photos/200/200?random=13',
-    },
-    rating: 4,
-    comment: 'Good quality, but took a bit longer to arrive than expected.',
-    date: '2023-05-10',
-  },
-  {
-    id: '3',
-    user: {
-      name: 'Carol Williams',
-      avatar: 'https://picsum.photos/200/200?random=14',
-    },
-    rating: 5,
-    comment: 'Excellent service and product quality. Highly recommend!',
-    date: '2023-05-05',
-  },
-];
-
-const averageRating = 4.7;
-const totalReviews = 128;
+// Helper function to apply platform-specific shadows
+const getShadowStyle = (shadowType: typeof Shadows.SOFT) => {
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow: shadowType.boxShadow
+    };
+  } else {
+    const { boxShadow, ...nativeShadows } = shadowType;
+    return nativeShadows;
+  }
+};
 
 export default function ReviewsScreen() {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [averageRating, setAverageRating] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
+  
+  // Get productId from route params
+  const { productId } = useLocalSearchParams();
+  
+  // Ensure productId is a string
+  const productIdString = typeof productId === 'string' ? productId : '';
 
-  const handleSubmitReview = () => {
-    if (rating > 0 && comment.trim()) {
-      console.log('Submitting review:', { rating, comment });
+  // Validate productId
+  useEffect(() => {
+    if (!productIdString) {
+      setError("Invalid product ID");
+      setLoading(false);
+      return;
+    }
+  }, [productIdString]);
+
+  // Fetch reviews and product data from Firestore
+  useEffect(() => {
+    // Skip if productId is invalid
+    if (!productIdString) {
+      return;
+    }
+    
+    // Fetch reviews
+    const reviewsQuery = query(
+      collection(db, 'reviews'),
+      where('productId', '==', productIdString),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+    
+    const unsubscribeReviews = onSnapshot(reviewsQuery, 
+      (snapshot) => {
+        const reviewsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setReviews(reviewsData);
+      },
+      (error) => {
+        console.error('Error fetching reviews:', error);
+        setError('Failed to load reviews. Please try again later.');
+      }
+    );
+    
+    // Fetch product rating stats
+    const fetchProductStats = async () => {
+      try {
+        const productRef = doc(db, 'products', productIdString);
+        const productSnap = await getDoc(productRef);
+        
+        if (productSnap.exists()) {
+          const productData = productSnap.data();
+          setAverageRating(productData.averageRating || 0);
+          setTotalReviews(productData.totalReviews || 0);
+        }
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching product data:', err);
+        setError('Failed to load product data. Please try again later.');
+        setLoading(false);
+      }
+    };
+    
+    fetchProductStats();
+    
+    return () => {
+      unsubscribeReviews();
+    };
+  }, [productIdString]);
+
+  const handleSubmitReview = async () => {
+    if (rating === 0) {
+      setError('Please select a rating');
+      return;
+    }
+    
+    if (!comment.trim()) {
+      setError('Please enter a comment');
+      return;
+    }
+    
+    if (!productIdString) {
+      setError('Invalid product ID');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      // Save the review to Firestore
+      const reviewData = {
+        productId: productIdString,
+        userId: 'USER_ID', // Would come from auth state
+        userName: 'USER_NAME', // Would come from user profile
+        userAvatar: 'USER_AVATAR', // Would come from user profile
+        rating,
+        comment,
+        createdAt: new Date(),
+      };
+      
+      await addDoc(collection(db, 'reviews'), reviewData);
+      
+      // Update product rating stats
+      const productRef = doc(db, 'products', productIdString);
+      await updateDoc(productRef, {
+        averageRating: ((averageRating * totalReviews) + rating) / (totalReviews + 1),
+        totalReviews: increment(1)
+      });
+      
+      // Update local state
+      const newReview = {
+        id: `${Date.now()}`,
+        user: {
+          name: 'Current User',
+          avatar: 'https://picsum.photos/200/200?random=15',
+        },
+        rating,
+        comment,
+        date: new Date().toISOString().split('T')[0],
+      };
+      
+      const updatedReviews = [newReview, ...reviews];
+      setReviews(updatedReviews);
+      
+      // Update average rating (demo calculation)
+      const totalRating = updatedReviews.reduce((sum, review) => sum + review.rating, 0);
+      setAverageRating(totalRating / updatedReviews.length);
+      setTotalReviews(updatedReviews.length);
+      
       setRating(0);
       setComment('');
       setShowReviewForm(false);
+    } catch (err) {
+      console.error('Error submitting review:', err);
+      setError('Failed to submit review. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const renderReview = ({ item }: { item: typeof reviews[0] }) => (
-    <View style={styles.reviewCard}>
+  const renderReview = ({ item }: { item: any }) => (
+    <View style={[styles.reviewCard, getShadowStyle(Shadows.SOFT)]}>
       <View style={styles.reviewHeader}>
-        <Avatar source={item.user.avatar} size={40} />
+        <Avatar source={item.userAvatar || 'https://picsum.photos/200/200?random=12'} size={40} />
         <View style={styles.reviewUserInfo}>
-          <ThemedText type="defaultSemiBold">{item.user.name}</ThemedText>
+          <ThemedText type="defaultSemiBold">{item.userName || 'Anonymous'}</ThemedText>
           <StarRating rating={item.rating} size={16} />
         </View>
-        <ThemedText style={styles.reviewDate}>{item.date}</ThemedText>
+        <ThemedText style={styles.reviewDate}>
+          {item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : 'Unknown date'}
+        </ThemedText>
       </View>
       <ThemedText style={styles.reviewComment}>{item.comment}</ThemedText>
     </View>
   );
+
+  if (loading) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.PRIMARY_START} />
+          <ThemedText style={styles.loadingText}>Loading reviews...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -79,7 +207,7 @@ export default function ReviewsScreen() {
         <ThemedText type="title">Reviews</ThemedText>
         <View style={styles.ratingSummary}>
           <ThemedText type="subtitle" style={styles.averageRating}>
-            {averageRating}
+            {averageRating.toFixed(1)}
           </ThemedText>
           <StarRating rating={averageRating} size={20} />
           <ThemedText style={styles.totalReviews}>
@@ -87,6 +215,9 @@ export default function ReviewsScreen() {
           </ThemedText>
         </View>
       </View>
+
+      {/* Error message */}
+      {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
 
       {/* Action Button */}
       <Button 
@@ -98,7 +229,7 @@ export default function ReviewsScreen() {
 
       {/* Review Form */}
       {showReviewForm && (
-        <View style={styles.reviewForm}>
+        <View style={[styles.reviewForm, getShadowStyle(Shadows.SOFT)]}>
           <ThemedText type="subtitle" style={styles.formTitle}>
             Your Rating
           </ThemedText>
@@ -106,25 +237,22 @@ export default function ReviewsScreen() {
             {[1, 2, 3, 4, 5].map((star) => (
               <TouchableOpacity
                 key={star}
-                onPress={() => setRating(star)}
                 style={styles.starButton}
+                onPress={() => setRating(star)}
               >
-                <StarRating rating={star <= rating ? star : 0} maxStars={1} size={32} />
+                <StarRating rating={star <= rating ? star : 0} size={32} maxStars={1} />
               </TouchableOpacity>
             ))}
           </View>
           
-          <ThemedText type="subtitle" style={styles.formTitle}>
-            Your Review
-          </ThemedText>
           <View style={styles.textAreaContainer}>
             <TextInput
-              style={styles.textArea}
+              style={[styles.textArea, getShadowStyle(Shadows.SOFT)]}
               value={comment}
               onChangeText={setComment}
-              placeholder="Share your experience..."
+              placeholder="Write your review..."
+              placeholderTextColor={Colors.GRAY_MED}
               multiline
-              numberOfLines={4}
               textAlignVertical="top"
             />
           </View>
@@ -132,7 +260,7 @@ export default function ReviewsScreen() {
           <Button 
             title="Submit Review" 
             onPress={handleSubmitReview}
-            disabled={rating === 0 || !comment.trim()}
+            disabled={loading}
           />
         </View>
       )}
@@ -143,6 +271,11 @@ export default function ReviewsScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderReview}
         contentContainerStyle={styles.reviewsList}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <ThemedText>No reviews yet. Be the first to review!</ThemedText>
+          </View>
+        }
       />
     </ThemedView>
   );
@@ -151,23 +284,38 @@ export default function ReviewsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.BG_LIGHT,
     padding: Spacing.SCREEN_PADDING,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: Spacing.LIST_GAP,
+    color: Colors.GRAY_MED,
+  },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: Spacing.SECTION_GAP,
   },
   ratingSummary: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: Spacing.LIST_GAP,
+    gap: Spacing.LIST_GAP,
   },
   averageRating: {
-    marginRight: Spacing.LIST_GAP,
+    color: Colors.PRIMARY_START,
   },
   totalReviews: {
-    marginLeft: Spacing.LIST_GAP,
     color: Colors.GRAY_MED,
+  },
+  errorText: {
+    color: Colors.ALERT_RED,
+    marginBottom: Spacing.LIST_GAP,
+    textAlign: 'center',
   },
   actionButton: {
     marginBottom: Spacing.SECTION_GAP,
@@ -177,7 +325,6 @@ const styles = StyleSheet.create({
     borderRadius: Radii.CARD,
     padding: Spacing.COMPONENT,
     marginBottom: Spacing.SECTION_GAP,
-    ...Shadows.SOFT,
   },
   formTitle: {
     marginBottom: Spacing.LIST_GAP,
@@ -198,7 +345,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.BG_LIGHT,
     borderRadius: Radii.BUTTON,
     padding: Spacing.COMPONENT,
-    ...Shadows.SOFT,
     color: Colors.TEXT,
     textAlignVertical: 'top',
   },
@@ -210,7 +356,6 @@ const styles = StyleSheet.create({
     borderRadius: Radii.CARD,
     padding: Spacing.COMPONENT,
     marginBottom: Spacing.LIST_GAP,
-    ...Shadows.SOFT,
   },
   reviewHeader: {
     flexDirection: 'row',
@@ -227,5 +372,11 @@ const styles = StyleSheet.create({
   },
   reviewComment: {
     color: Colors.TEXT,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: Spacing.SECTION_GAP,
   },
 });

@@ -1,7 +1,19 @@
 import React from 'react';
-import { View, StyleSheet, TextInput } from 'react-native';
+import { View, StyleSheet, TextInput, Platform } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Radii, Shadows, Spacing } from '@/src/theme';
+
+// Helper function to apply platform-specific shadows
+const getShadowStyle = (shadowType: typeof Shadows.SOFT) => {
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow: shadowType.boxShadow
+    };
+  } else {
+    const { boxShadow, ...nativeShadows } = shadowType;
+    return nativeShadows;
+  }
+};
 
 interface SearchBarProps {
   value: string;
@@ -11,7 +23,7 @@ interface SearchBarProps {
 
 export function SearchBar({ value, onChangeText, placeholder = 'Search...' }: SearchBarProps) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, getShadowStyle(Shadows.SOFT)]}>
       <IconSymbol name="magnifyingglass" size={20} color={Colors.GRAY_MED} />
       <TextInput
         style={styles.input}
@@ -31,7 +43,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.BG_LIGHT,
     borderRadius: Radii.BUTTON,
     paddingHorizontal: Spacing.COMPONENT,
-    ...Shadows.SOFT,
     height: 56,
   },
   input: {

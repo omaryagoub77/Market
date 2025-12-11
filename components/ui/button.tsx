@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radii, Shadows } from '@/src/theme';
 
@@ -8,8 +8,8 @@ interface ButtonProps {
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'circular';
   disabled?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: object;
+  textStyle?: object;
 }
 
 export function Button({
@@ -20,8 +20,23 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
+  // Create platform-specific shadow styles
+  const getShadowStyle = () => {
+    if (Platform.OS === 'web') {
+      // For web, use boxShadow directly
+      return {
+        boxShadow: Shadows.SOFT.boxShadow
+      };
+    } else {
+      // For native, use React Native shadow properties
+      const { boxShadow, ...nativeShadows } = Shadows.SOFT;
+      return nativeShadows;
+    }
+  };
+
   const buttonStyles = [
     styles.base,
+    getShadowStyle(),
     variant === 'primary' && styles.primary,
     variant === 'secondary' && styles.secondary,
     variant === 'circular' && styles.circular,
@@ -55,7 +70,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: Radii.BUTTON,
-    ...Shadows.SOFT,
   },
   primary: {
     backgroundColor: Colors.BLACK,

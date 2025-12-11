@@ -1,23 +1,53 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
+import { auth } from '@/src/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { getRedirectUrl, clearRedirectUrl } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError('Please enter both email and password');
+      return;
+    }
+    
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      console.log('Logging in with:', { email, password });
+    setError('');
+    
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('User logged in:', userCredential.user);
+      
+      // Check if there's a redirect URL stored
+      const redirectUrl = getRedirectUrl();
+      if (redirectUrl && redirectUrl.startsWith('/')) {
+        // Clear the redirect URL after using it
+        clearRedirectUrl();
+        // Redirect to the stored URL
+        router.replace(redirectUrl as any);
+      } else {
+        // Default redirect to home feed
+        router.replace('/(tabs)/home-feed');
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      setError(error.message || 'Failed to login. Please check your credentials.');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleGoogleLogin = () => {
@@ -38,6 +68,8 @@ export default function LoginScreen() {
           Sign in to continue
         </ThemedText>
 
+        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+
         <View style={styles.form}>
           <Input
             label="Email"
@@ -56,7 +88,7 @@ export default function LoginScreen() {
             secureTextEntry
           />
 
-          <TouchableOpacity style={styles.forgotPassword}>
+          <TouchableOpacity style={styles.forgotPassword} onPress={() => router.push('/auth/forgot-password')}>
             <ThemedText style={styles.forgotPasswordText}>Forgot Password?</ThemedText>
           </TouchableOpacity>
 
@@ -90,7 +122,7 @@ export default function LoginScreen() {
 
         <View style={styles.signupContainer}>
           <ThemedText>Don't have an account? </ThemedText>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/auth/register')}>
             <ThemedText style={styles.signupText}>Sign Up</ThemedText>
           </TouchableOpacity>
         </View>
@@ -116,6 +148,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.GRAY_MED,
     marginBottom: Spacing.SECTION_GAP,
+  },
+  errorText: {
+    color: Colors.ALERT_RED,
+    textAlign: 'center',
+    marginBottom: Spacing.LIST_GAP,
   },
   form: {
     marginBottom: Spacing.SECTION_GAP,

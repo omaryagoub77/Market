@@ -1,30 +1,71 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
+import { auth } from '@/src/firebase';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function RegisterScreen() {
+  const router = useRouter();
+  const { getRedirectUrl, clearRedirectUrl } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
+    if (!name || !email || !password || !confirmPassword) {
+      setError('Please fill in all fields');
+      return;
+    }
+    
     if (password !== confirmPassword) {
-      console.log('Passwords do not match');
+      setError('Passwords do not match');
+      return;
+    }
+    
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
       return;
     }
     
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      console.log('Registering with:', { name, email, password });
+    setError('');
+    
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // Update the user's display name
+      if (userCredential.user) {
+        await updateProfile(userCredential.user, {
+          displayName: name
+        });
+      }
+      console.log('User registered:', userCredential.user);
+      
+      // Check if there's a redirect URL stored
+      const redirectUrl = getRedirectUrl();
+      if (redirectUrl && redirectUrl.startsWith('/')) {
+        // Clear the redirect URL after using it
+        clearRedirectUrl();
+        // Redirect to the stored URL
+        router.replace(redirectUrl as any);
+      } else {
+        // Default redirect to home feed
+        router.replace('/(tabs)/home-feed');
+      }
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      setError(error.message || 'Failed to register. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleGoogleRegister = () => {
@@ -44,6 +85,8 @@ export default function RegisterScreen() {
         <ThemedText style={styles.subtitle}>
           Sign up to get started
         </ThemedText>
+
+        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
 
         <View style={styles.form}>
           <Input
@@ -108,7 +151,7 @@ export default function RegisterScreen() {
 
         <View style={styles.loginContainer}>
           <ThemedText>Already have an account? </ThemedText>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/auth/login')}>
             <ThemedText style={styles.loginText}>Sign In</ThemedText>
           </TouchableOpacity>
         </View>
@@ -134,6 +177,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.GRAY_MED,
     marginBottom: Spacing.SECTION_GAP,
+  },
+  errorText: {
+    color: Colors.ALERT_RED,
+    textAlign: 'center',
+    marginBottom: Spacing.LIST_GAP,
   },
   form: {
     marginBottom: Spacing.SECTION_GAP,

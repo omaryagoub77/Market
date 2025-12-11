@@ -1,83 +1,195 @@
-import React from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { ProductCard } from '@/components/ui/product-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
+import { Colors, Spacing, Radii } from '@/src/theme';
+import { Shadows } from '@/src/theme';
+import { db } from '@/src/firebase';
+import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
 
-// Mock data - in a real app, this would come from Firebase
-const reportedItems = [
-  {
-    id: '1',
-    title: 'Suspicious Item',
-    price: '$49.99',
-    imageUrl: 'https://picsum.photos/300/300?random=15',
-    reporter: 'User123',
-    reason: 'Inappropriate content',
-  },
-  {
-    id: '2',
-    title: 'Counterfeit Product',
-    price: '$29.99',
-    imageUrl: 'https://picsum.photos/300/300?random=16',
-    reporter: 'User456',
-    reason: 'Suspected fake',
-  },
-];
-
-const blockedUsers = [
-  {
-    id: '1',
-    name: 'SpammerUser',
-    email: 'spam@example.com',
-    reason: 'Multiple spam posts',
-  },
-  {
-    id: '2',
-    name: 'ScammerUser',
-    email: 'scam@example.com',
-    reason: 'Fraudulent activity',
-  },
-];
+// Helper function to apply platform-specific shadows
+const getShadowStyle = (shadowType: typeof Shadows.SOFT) => {
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow: shadowType.boxShadow
+    };
+  } else {
+    const { boxShadow, ...nativeShadows } = shadowType;
+    return nativeShadows;
+  }
+};
 
 export default function AdminScreen() {
   // In a real app, this would check if the current user is an admin
   const isAdmin = true; // Mock value
-  
-  if (!isAdmin) {
+  const [reportedItems, setReportedItems] = useState<any[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Fetch reported items and blocked users from Firestore
+  useEffect(() => {
+    // Fetch reported items
+    const reportedItemsQuery = query(
+      collection(db, 'reports'),
+      where('status', '==', 'pending'),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const unsubscribeReports = onSnapshot(reportedItemsQuery, 
+      (snapshot) => {
+        const reportsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setReportedItems(reportsData);
+      },
+      (error) => {
+        console.error('Error fetching reports:', error);
+        setError('Failed to load reports. Please try again later.');
+      }
+    );
+    
+    // Fetch blocked users
+    const blockedUsersQuery = query(
+      collection(db, 'users'),
+      where('blocked', '==', true)
+    );
+    
+    const unsubscribeBlocked = onSnapshot(blockedUsersQuery, 
+      (snapshot) => {
+        const usersData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setBlockedUsers(usersData);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching blocked users:', error);
+        setError('Failed to load blocked users. Please try again later.');
+        setLoading(false);
+      }
+    );
+    
+    return () => {
+      unsubscribeReports();
+      unsubscribeBlocked();
+    };
+  }, []);
+
+  if (loading) {
     return (
       <ThemedView style={styles.container}>
-        <ThemedText type="title" style={styles.title}>
-          Access Denied
-        </ThemedText>
-        <ThemedText style={styles.accessDeniedText}>
-          You don't have permission to access this page.
-        </ThemedText>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.PRIMARY_START} />
+          <ThemedText style={styles.loadingText}>Loading admin panel...</ThemedText>
+        </View>
       </ThemedView>
     );
   }
 
-  const handleDeleteItem = (itemId: string) => {
-    console.log('Deleting item:', itemId);
-    // In a real app, this would delete the item from Firebase
+  if (error) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
+          <Button 
+            title="Retry" 
+            onPress={() => window.location.reload()} 
+          />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  const handleDeleteReport = async (reportId: string, itemId: string) => {
+    try {
+      // Delete the report
+      await deleteDoc(doc(db, 'reports', reportId));
+      
+      // Optionally, delete the reported item itself
+      // await deleteDoc(doc(db, 'items', itemId));
+      
+      console.log('Report deleted successfully');
+    } catch (err) {
+      console.error('Error deleting report:', err);
+      setError('Failed to delete report. Please try again.');
+    }
   };
 
-  const handleBlockUser = (userId: string) => {
-    console.log('Blocking user:', userId);
-    // In a real app, this would block the user in Firebase
+  const handleBlockUser = async (userId: string, reportId: string) => {
+    try {
+      // Update user document to set blocked status
+      await updateDoc(doc(db, 'users', userId), {
+        blocked: true,
+        blockReason: 'Violated community guidelines'
+      });
+      
+      // Update report status
+      await updateDoc(doc(db, 'reports', reportId), {
+        status: 'resolved'
+      });
+      
+      console.log('User blocked successfully');
+    } catch (err) {
+      console.error('Error blocking user:', err);
+      setError('Failed to block user. Please try again.');
+    }
   };
 
-  const handleUnblockUser = (userId: string) => {
-    console.log('Unblocking user:', userId);
-    // In a real app, this would unblock the user in Firebase
+  const handleDismissReport = async (reportId: string) => {
+    try {
+      // Update report status
+      await updateDoc(doc(db, 'reports', reportId), {
+        status: 'dismissed'
+      });
+      
+      console.log('Report dismissed successfully');
+    } catch (err) {
+      console.error('Error dismissing report:', err);
+      setError('Failed to dismiss report. Please try again.');
+    }
   };
+
+  const handleUnblockUser = async (userId: string) => {
+    try {
+      // Update user document to remove blocked status
+      await updateDoc(doc(db, 'users', userId), {
+        blocked: false,
+        blockReason: ''
+      });
+      
+      console.log('User unblocked successfully');
+    } catch (err) {
+      console.error('Error unblocking user:', err);
+      setError('Failed to unblock user. Please try again.');
+    }
+  };
+
+  if (!isAdmin) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.accessDeniedContainer}>
+          <IconSymbol name="lock.fill" size={48} color={Colors.GRAY_MED} />
+          <ThemedText type="title" style={styles.accessDeniedText}>
+            Access Denied
+          </ThemedText>
+          <ThemedText style={styles.accessDeniedText}>
+            You don't have permission to access the admin panel.
+          </ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="title" style={styles.title}>
-        Admin Dashboard
+        Admin Panel
       </ThemedText>
       
       {/* Reported Items Section */}
@@ -88,37 +200,39 @@ export default function AdminScreen() {
         data={reportedItems}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View style={styles.reportedItem}>
-            <ProductCard 
-              title={item.title}
-              price={item.price}
-              imageUrl={item.imageUrl}
-              onPress={() => console.log('Item pressed')}
-            />
+          <View style={[styles.reportCard, getShadowStyle(Shadows.SOFT)]}>
+            <ThemedText type="defaultSemiBold">{item.itemId || 'Unknown Item'}</ThemedText>
             <View style={styles.reportDetails}>
-              <ThemedText style={styles.reportReason}>
-                Reported by: {item.reporter}
-              </ThemedText>
-              <ThemedText style={styles.reportReason}>
-                Reason: {item.reason}
-              </ThemedText>
+              <ThemedText style={styles.reportReason}>Reason: {item.reason || 'No reason provided'}</ThemedText>
+              <ThemedText style={styles.reportReason}>Reported by: {item.reportedBy || 'Unknown user'}</ThemedText>
             </View>
             <View style={styles.adminActions}>
               <Button 
-                title="Delete" 
+                title="Dismiss" 
                 variant="secondary" 
-                onPress={() => handleDeleteItem(item.id)}
                 style={styles.adminButton}
+                onPress={() => handleDismissReport(item.id)}
               />
               <Button 
-                title="Ignore" 
+                title="Block User" 
                 variant="secondary" 
-                onPress={() => console.log('Ignoring report')}
                 style={styles.adminButton}
+                onPress={() => handleBlockUser(item.userId, item.id)}
+              />
+              <Button 
+                title="Delete" 
+                variant="primary" 
+                style={styles.adminButton}
+                onPress={() => handleDeleteReport(item.id, item.itemId)}
               />
             </View>
           </View>
         )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <ThemedText>No reported items.</ThemedText>
+          </View>
+        }
       />
       
       {/* Blocked Users Section */}
@@ -129,11 +243,11 @@ export default function AdminScreen() {
         data={blockedUsers}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View style={styles.userCard}>
+          <View style={[styles.userCard, getShadowStyle(Shadows.SOFT)]}>
             <View style={styles.userInfo}>
-              <ThemedText type="defaultSemiBold">{item.name}</ThemedText>
-              <ThemedText style={styles.userEmail}>{item.email}</ThemedText>
-              <ThemedText style={styles.blockReason}>Reason: {item.reason}</ThemedText>
+              <ThemedText type="defaultSemiBold">{item.name || 'Unknown User'}</ThemedText>
+              <ThemedText style={styles.userEmail}>{item.email || 'No email'}</ThemedText>
+              <ThemedText style={styles.blockReason}>Reason: {item.blockReason || 'No reason provided'}</ThemedText>
             </View>
             <Button 
               title="Unblock" 
@@ -142,6 +256,11 @@ export default function AdminScreen() {
             />
           </View>
         )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <ThemedText>No blocked users.</ThemedText>
+          </View>
+        }
       />
     </ThemedView>
   );
@@ -150,22 +269,50 @@ export default function AdminScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.BG_LIGHT,
     padding: Spacing.SCREEN_PADDING,
   },
   title: {
     marginBottom: Spacing.SECTION_GAP,
   },
   sectionTitle: {
-    marginBottom: Spacing.LIST_GAP,
+    marginBottom: Spacing.COMPONENT,
     marginTop: Spacing.SECTION_GAP,
   },
-  reportedItem: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: Spacing.COMPONENT,
+    color: Colors.GRAY_MED,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.SECTION_GAP,
+  },
+  errorText: {
+    color: Colors.ALERT_RED,
+    textAlign: 'center',
+    marginBottom: Spacing.COMPONENT,
+  },
+  accessDeniedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.SECTION_GAP,
+  },
+  accessDeniedText: {
+    textAlign: 'center',
+    color: Colors.GRAY_MED,
+  },
+  reportCard: {
     backgroundColor: Colors.BG_ALT,
     borderRadius: Radii.CARD,
     padding: Spacing.COMPONENT,
     marginBottom: Spacing.LIST_GAP,
-    ...Shadows.SOFT,
   },
   reportDetails: {
     marginVertical: Spacing.LIST_GAP,
@@ -191,7 +338,6 @@ const styles = StyleSheet.create({
     borderRadius: Radii.CARD,
     padding: Spacing.COMPONENT,
     marginBottom: Spacing.LIST_GAP,
-    ...Shadows.SOFT,
   },
   userInfo: {
     flex: 1,
@@ -206,8 +352,10 @@ const styles = StyleSheet.create({
     color: Colors.GRAY_MED,
     fontSize: 14,
   },
-  accessDeniedText: {
-    textAlign: 'center',
-    color: Colors.GRAY_MED,
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: Spacing.SECTION_GAP,
   },
 });

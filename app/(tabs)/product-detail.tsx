@@ -11,6 +11,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { createOrGetChatRoom } from '@/utils/chatUtils';
+import { addFavoriteProduct, isProductFavorite, removeFavoriteProduct } from '@/utils/favoritesUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -20,6 +21,7 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isFavorite, setIsFavorite] = useState(false);
   
   // Get productId from route params
   const { productId } = useLocalSearchParams();
@@ -64,6 +66,18 @@ export default function ProductDetailScreen() {
     return () => unsubscribe();
   }, [productId]);
 
+  // Check if product is in favorites
+  useEffect(() => {
+    const checkIfFavorite = async () => {
+      if (productId && typeof productId === "string") {
+        const favoriteStatus = await isProductFavorite(productId);
+        setIsFavorite(favoriteStatus);
+      }
+    };
+    
+    checkIfFavorite();
+  }, [productId]);
+
   // Handle contact seller button press
   const handleContactSeller = async () => {
     // Check if user is logged in
@@ -90,6 +104,34 @@ export default function ProductDetailScreen() {
           params: { sellerId: product.ownerId, productId: product.id }
         });
       }
+    }
+  };
+
+  // Handle toggle favorite button press
+  const handleToggleFavorite = async () => {
+    if (!productId || typeof productId !== "string") return;
+    
+    try {
+      if (isFavorite) {
+        // Remove from favorites
+        const success = await removeFavoriteProduct(productId);
+        if (success) {
+          setIsFavorite(false);
+          alert('Removed from your wishes');
+        }
+      } else {
+        // Add to favorites
+        const success = await addFavoriteProduct(productId);
+        if (success) {
+          setIsFavorite(true);
+          alert('Added to your wishes!');
+        } else {
+          alert('Already in your wishes!');
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      alert('Failed to update wishes');
     }
   };
 
@@ -210,8 +252,9 @@ export default function ProductDetailScreen() {
               style={styles.contactButton}
             />
             <Button 
-              title="Add to Cart" 
-              onPress={() => console.log('Add to cart')}
+              title={isFavorite ? "In Wishes" : "Add to Wishes"}
+              variant={isFavorite ? "secondary" : "primary"}
+              onPress={handleToggleFavorite}
             />
           </View>
         </View>

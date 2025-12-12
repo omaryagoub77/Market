@@ -21,10 +21,12 @@ import { Badge } from '@/components/ui/badge';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors as ThemeColors, Radii, Spacing, Shadows } from '@/src/theme';
 import { db } from '@/src/firebase';
-import { collection, query, orderBy, limit, onSnapshot, startAfter, DocumentSnapshot, QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, startAfter, DocumentSnapshot, QueryDocumentSnapshot, doc } from 'firebase/firestore';
 import * as Haptics from 'expo-haptics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext'; // Add this import
+import { getUserProfile } from '@/utils/userProfile'; // Add this import
 
 // Types
 interface Product {
@@ -311,7 +313,9 @@ export default function HomeFeedScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const colorScheme = useColorScheme();
   const router = useRouter(); // Initialize router
-
+  const { user: currentUser } = useAuth(); // Get current user from AuthContext
+  const [userProfile, setUserProfile] = useState<any>(null); // Add user profile state
+  
   // Calculate number of columns based on screen width
   const numColumns = useMemo(() => {
     const windowWidth = Dimensions.get('window').width;
@@ -480,6 +484,23 @@ export default function HomeFeedScreen() {
     StatusBar.setBarStyle(colorScheme === 'dark' ? 'light-content' : 'dark-content');
   }, [colorScheme]);
   
+  // Subscribe to user profile updates
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Listen for user profile updates in real-time
+    const userDocRef = doc(db, 'users', currentUser.uid);
+    const unsubscribe = onSnapshot(userDocRef, (doc) => {
+      if (doc.exists()) {
+        setUserProfile(doc.data());
+      } else {
+        setUserProfile(null);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [currentUser]);
+
   if (loading && products.length === 0) {
     return (
       <ThemedView style={styles.container}>
@@ -532,11 +553,15 @@ export default function HomeFeedScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Avatar 
-            source="https://picsum.photos/200/200?random=7" 
-            size={56} 
-            showRing={true} 
-          />
+          {/* Dynamic Avatar with Navigation */}
+          <Pressable onPress={() => router.push('/profile')}>
+            <Avatar 
+              source={userProfile?.photoURL || currentUser?.photoURL || "https://picsum.photos/200/200?random=7"} 
+              size={56} 
+              showRing={true} 
+            />
+          </Pressable>
+          
           <View style={styles.headerRight}>
             <View style={styles.notificationContainer}>
               <IconSymbol name="bell.fill" size={24} color={ThemeColors.ICON} />

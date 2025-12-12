@@ -65,12 +65,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="my-products"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="person.fill" color={color} />,
+          title: 'My Products',
+          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="basket.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="favourite"
+        options={{
+          title: 'Favorites',
+          tabBarIcon: ({ color }) => <IconSymbol size={BottomNav.ICON_SIZE} name="heart.fill" color={color} />,
+        }}
+      />
+      {/* Profile tab removed - moved to home feed page */}
     </Tabs>
   );
 }

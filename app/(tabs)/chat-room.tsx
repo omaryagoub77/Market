@@ -7,10 +7,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
 import { db, auth } from '@/src/firebase';
-import { collection, query, orderBy, onSnapshot, where, addDoc, serverTimestamp, limit, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, addDoc, serverTimestamp, limit, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { createOrGetChatRoom } from '@/utils/chatUtils';
+import { getUserProfile } from '@/utils/userProfile';
 
 export default function ChatRoomScreen() {
   const router = useRouter();
@@ -76,11 +77,59 @@ export default function ChatRoomScreen() {
     );
     
     const unsubscribe = onSnapshot(messagesQuery, 
-      (snapshot) => {
-        const messagesData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+      async (snapshot) => {
+        // Create a cache for user profiles to avoid repeated fetches
+        const userCache: Record<string, { fullname: string; photoURL?: string }> = {};
+        
+        const messagesData = await Promise.all(snapshot.docs.map(async (doc) => {
+          const messageData = doc.data();
+          const messageId = doc.id;
+          
+          // For current user messages, use current user data
+          if (messageData.senderId === currentUser?.uid) {
+            return {
+              id: messageId,
+              ...messageData,
+              senderName: currentUser.displayName || 'You',
+              senderAvatar: currentUser.photoURL || undefined
+            };
+          }
+          
+          // For other user messages, fetch from Firestore or cache
+          let senderName = messageData.senderName || 'User';
+          let senderAvatar = messageData.senderAvatar || undefined;
+          
+          // Check cache first
+          if (userCache[messageData.senderId]) {
+            senderName = userCache[messageData.senderId].fullname || senderName;
+            senderAvatar = userCache[messageData.senderId].photoURL || senderAvatar;
+          } else {
+            // Fetch from Firestore if not in cache
+            try {
+              const userProfile = await getUserProfile(messageData.senderId);
+              if (userProfile) {
+                senderName = userProfile.fullname || senderName;
+                senderAvatar = userProfile.photoURL || senderAvatar;
+                // Cache the user profile
+                userCache[messageData.senderId] = {
+                  fullname: userProfile.fullname,
+                  photoURL: userProfile.photoURL
+                };
+              }
+            } catch (error) {
+              console.error('Error fetching user profile:', error);
+              // Fall back to existing values
+            }
+          }
+          
+          return {
+            id: messageId,
+            ...messageData,
+            senderName,
+            senderAvatar
+          };
         }));
+        
         setMessages(messagesData);
         setLoading(false);
         

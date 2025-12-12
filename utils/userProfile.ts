@@ -9,6 +9,8 @@ export interface UserProfile {
   email: string;
   gender: string;
   age: number;
+  homeAddress?: string;
+  photoURL?: string;
   createdAt: Date;
   updatedAt: Date;
 }

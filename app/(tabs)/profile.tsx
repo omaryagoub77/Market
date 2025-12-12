@@ -1,114 +1,142 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
+// app/profile/index.tsx
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  ScrollView,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  Image,
+  Platform,
+  KeyboardAvoidingView,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProductCard } from '@/components/ui/product-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
+import { auth, db } from '@/src/firebase';
+import { doc, deleteDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged, updateProfile, User } from 'firebase/auth';
+import { getUserProfile, updateUserProfile, createUserProfile } from '@/utils/userProfile';
 import { uploadImageToCloudinary } from '@/src/cloudinary';
-import { db, auth } from '@/src/firebase';
-import { doc, updateDoc, collection, query, where, onSnapshot, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
 import * as ImagePicker from 'expo-image-picker';
-// Import user profile utilities
-import { getUserProfile, updateUserProfile } from '@/utils/userProfile';
+
+type Gender = 'male' | 'female' | 'other' | '';
 
 export default function ProfileScreen() {
   const router = useRouter();
+
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [profileExists, setProfileExists] = useState(false);
+  const [showProfileForm, setShowProfileForm] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  // Form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('https://picsum.photos/200/200?random=8');
-  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null); // Local URI only
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [listings, setListings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  
-  // Additional user profile fields
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [location, setLocation] = useState('');
-  const [gender, setGender] = useState('');
+  const [gender, setGender] = useState<Gender>('');
   const [age, setAge] = useState('');
+  const [homeAddress, setHomeAddress] = useState('');
 
+  // Original values for cancel
+  const [original, setOriginal] = useState<any>({});
+
+  const [listings, setListings] = useState<any[]>([]);
+
+  // Auth + profile load
   useEffect(() => {
-    // Listen for auth state changes
-    const unsubscribeAuth = onAuthStateChanged(auth, (user: any) => {
-      if (user) {
-        setCurrentUser(user);
-        setName(user.displayName || '');
-        setEmail(user.email || '');
-        setAvatarUrl(user.photoURL || 'https://picsum.photos/200/200?random=8');
-        
-        // Load additional user profile data
-        loadUserProfile(user.uid);
-      } else {
-        setCurrentUser(null);
-        setName('');
-        setEmail('');
-        setPhoneNumber('');
-        setLocation('');
-        setGender('');
-        setAge('');
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        router.replace('/auth/login');
+        return;
       }
-    });
 
-    // Cleanup subscription on unmount
-    return () => unsubscribeAuth();
-  }, []);
+      setUser(u);
+      setName(u.displayName || '');
+      setEmail(u.email || '');
 
-  const loadUserProfile = async (uid: string) => {
-    try {
-      const profile = await getUserProfile(uid);
+      const profile = await getUserProfile(u.uid);
       if (profile) {
+        setProfileExists(true);
         setPhoneNumber(profile.phoneNumber || '');
         setLocation(profile.location || '');
-        setGender(profile.gender || '');
-        setAge(profile.age ? profile.age.toString() : '');
+        setGender((profile.gender as Gender) || '');
+        setAge(profile.age ? String(profile.age) : '');
+        setHomeAddress(profile.homeAddress || '');
+        setAvatarUrl(profile.photoURL || '');
+        
+        setOriginal({
+          name: u.displayName || '',
+          email: u.email || '',
+          avatarUrl: profile.photoURL || '',
+          phoneNumber: profile.phoneNumber || '',
+          location: profile.location || '',
+          gender: profile.gender || '',
+          age: profile.age ? String(profile.age) : '',
+          homeAddress: profile.homeAddress || '',
+        });
+      } else {
+        setProfileExists(false);
+        setOriginal({
+          name: u.displayName || '',
+          email: u.email || '',
+          avatarUrl: '',
+          phoneNumber: '',
+          location: '',
+          gender: '',
+          age: '',
+          homeAddress: '',
+        });
       }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
+
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [router]);
+
+  // Listings listener
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(collection(db, 'products'), where('ownerId', '==', user.uid));
+
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setListings(data);
+    });
+
+    return () => unsub();
+  }, [user]);
+
+  const startEdit = () => setIsEditing(true);
+
+  const cancelEdit = () => {
+    setName(original.name);
+    setEmail(original.email);
+    setAvatarUrl(original.avatarUrl);
+    setPhoneNumber(original.phoneNumber);
+    setLocation(original.location);
+    setGender(original.gender);
+    setAge(original.age);
+    setHomeAddress(original.homeAddress);
+    setSelectedAvatar(null);
+    setError('');
+    setIsEditing(false);
   };
 
-  useEffect(() => {
-    // Fetch user's listings from Firestore
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
-
-    const listingsQuery = query(
-      collection(db, 'products'),
-      where('ownerId', '==', currentUser.uid)
-    );
-    
-    const unsubscribe = onSnapshot(listingsQuery, 
-      (snapshot) => {
-        const listingsData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        
-        setListings(listingsData);
-        setLoading(false);
-      },
-      (error) => {
-        console.error('Error fetching listings:', error);
-        setError('Failed to load listings. Please try again later.');
-        setLoading(false);
-      }
-    );
-    
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, [currentUser]);
-
-  const handleAvatarSelect = async () => {
+  const handleAvatarUpload = async () => {
     // Request permission to access media library
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -117,6 +145,8 @@ export default function ProfileScreen() {
     }
 
     try {
+      setAvatarUploading(true);
+      
       // Launch image picker
       let result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -130,446 +160,333 @@ export default function ProfileScreen() {
         setSelectedAvatar(imageUri);
       }
     } catch (error) {
-      console.error('Avatar selection error:', error);
-      setError('Failed to select avatar. Please try again.');
+      setError('Failed to select image. Please try again.');
+    } finally {
+      setAvatarUploading(false);
     }
   };
 
-  const handleSaveProfile = async () => {
-    if (!name.trim()) {
-      setError('Please enter a valid name');
-      return;
-    }
-    
-    // Validate phone number (basic validation)
-    if (!phoneNumber.trim()) {
-      setError('Please enter a phone number');
-      return;
-    }
-    
-    // Validate age
-    if (!age.trim() || isNaN(Number(age)) || Number(age) <= 0) {
-      setError('Please enter a valid age');
-      return;
-    }
-    
-    // Validate gender
-    if (!gender.trim()) {
-      setError('Please select a gender');
-      return;
-    }
-    
-    setIsSaving(true);
+  const saveProfile = async () => {
+    if (!name.trim()) return setError('Name is required');
+    if (!email.trim()) return setError('Email is required');
+    if (!phoneNumber.trim()) return setError('Phone number is required');
+    if (!homeAddress.trim()) return setError('Home address is required');
+    if (!age || isNaN(Number(age)) || Number(age) < 13) return setError('Valid age required');
+
+    setSaving(true);
     setError('');
-    
+
     try {
-      if (!currentUser) {
-        throw new Error('You must be logged in to save profile');
-      }
-      
-      let finalAvatarUrl = avatarUrl;
-      
-      // Upload new avatar to Cloudinary if selected
+      let finalUrl = avatarUrl;
+
       if (selectedAvatar) {
-        try {
-          finalAvatarUrl = await uploadImageToCloudinary(selectedAvatar);
-        } catch (uploadError) {
-          console.error('Avatar upload error:', uploadError);
-          throw new Error('Failed to upload avatar. Please try again.');
-        }
+        finalUrl = await uploadImageToCloudinary(selectedAvatar);
       }
-      
-      // Update user profile in Firestore users collection
-      await updateUserProfile(currentUser.uid, {
-        fullname: name,
-        phoneNumber: phoneNumber,
-        location: location || undefined,
-        email: email,
-        gender: gender,
-        age: parseInt(age)
+
+      // Update custom profile
+      await updateUserProfile(user!.uid, {
+        fullname: name.trim(),
+        email: email.trim(),
+        phoneNumber: phoneNumber.trim(),
+        ...(location.trim() && { location: location.trim() }),
+        gender,
+        age: Number(age),
+        ...(homeAddress.trim() && { homeAddress: homeAddress.trim() }),
+        photoURL: finalUrl,
       });
-      
-      // Update user profile in Firestore (legacy)
-      const userRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userRef, { 
-        name: name,
-        photoURL: finalAvatarUrl
+
+      // Update Auth profile name only
+      await updateProfile(user!, {
+        displayName: name.trim(),
       });
-      
-      // Update state
-      setAvatarUrl(finalAvatarUrl);
+
+      setAvatarUrl(finalUrl);
       setSelectedAvatar(null);
       setIsEditing(false);
-      
-      Alert.alert('Success', 'Profile updated successfully!');
-    } catch (error: any) {
-      console.error('Save profile error:', error);
-      setError(error.message || 'Failed to update profile. Please try again.');
+      setShowProfileForm(false);
+      setProfileExists(true);
+      Alert.alert('Success', 'Profile updated');
+    } catch (e: any) {
+      setError(e.message || 'Save failed');
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      router.replace('/auth/login');
-    } catch (error: any) {
-      console.error('Logout error:', error);
-      setError(error.message || 'Failed to logout. Please try again.');
-    }
-  };
+  const makeProfile = async () => {
+    if (!name.trim()) return setError('Name is required');
+    if (!email.trim()) return setError('Email is required');
+    if (!phoneNumber.trim()) return setError('Phone number is required');
+    if (!homeAddress.trim()) return setError('Home address is required');
+    if (!age || isNaN(Number(age)) || Number(age) < 13) return setError('Valid age required');
 
-  const handleCancelEdit = () => {
-    // Reset to original values
-    if (currentUser) {
-      setName(currentUser.displayName || '');
-      setEmail(currentUser.email || '');
-      setAvatarUrl(currentUser.photoURL || 'https://picsum.photos/200/200?random=8');
-      loadUserProfile(currentUser.uid);
-    }
-    setSelectedAvatar(null);
-    setIsEditing(false);
+    setSaving(true);
     setError('');
+
+    try {
+      let finalUrl = avatarUrl;
+
+      if (selectedAvatar) {
+        finalUrl = await uploadImageToCloudinary(selectedAvatar);
+      }
+
+      // Create profile
+      await createUserProfile({
+        uid: user!.uid,
+        fullname: name.trim(),
+        email: email.trim(),
+        phoneNumber: phoneNumber.trim(),
+        ...(location.trim() && { location: location.trim() }),
+        gender,
+        age: Number(age),
+        ...(homeAddress.trim() && { homeAddress: homeAddress.trim() }),
+        photoURL: finalUrl,
+      });
+
+      // Update Auth profile name only
+      await updateProfile(user!, {
+        displayName: name.trim(),
+      });
+
+      setAvatarUrl(finalUrl);
+      setSelectedAvatar(null);
+      setShowProfileForm(false);
+      setProfileExists(true);
+      Alert.alert('Success', 'Profile created successfully!');
+    } catch (e: any) {
+      setError(e.message || 'Profile creation failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteListing = (id: string, title: string) => {
+    Alert.alert('Delete', `Remove "${title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteDoc(doc(db, 'products', id));
+        },
+      },
+    ]);
   };
 
   if (loading) {
     return (
-      <ThemedView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.PRIMARY_START} />
-          <ThemedText style={styles.loadingText}>Loading profile...</ThemedText>
-        </View>
+      <ThemedView style={styles.center}>
+        <ActivityIndicator size="large" color={Colors.PRIMARY_START} />
       </ThemedView>
     );
   }
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
-        
-        {/* Profile Header */}
-        <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
-            <Image 
-              source={{ uri: selectedAvatar || avatarUrl }} 
-              style={styles.avatar} 
-            />
-            {isEditing && (
-              <TouchableOpacity 
-                style={styles.changeAvatarButton}
-                onPress={handleAvatarSelect}
-              >
-                <IconSymbol 
-                  name="pencil" 
-                  size={16} 
-                  color={Colors.BG_LIGHT} 
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={styles.userInfo}>
-            {isEditing ? (
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <ThemedView style={styles.profileHeader}>
+            {profileExists ? (
               <>
-                <Input
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Full Name"
-                  style={styles.nameInput}
+                <ThemedText type="title">{name}</ThemedText>
+                <ThemedText>{email}</ThemedText>
+                {(selectedAvatar || avatarUrl) ? (
+                  <Image 
+                    source={{ uri: selectedAvatar || avatarUrl }} 
+                    style={styles.avatar} 
+                  />
+                ) : (
+                  <ThemedView style={[styles.avatar, { backgroundColor: Colors.BG_ALT, justifyContent: 'center', alignItems: 'center' }]}>                    <IconSymbol 
+                      name="person.fill" 
+                      size={40} 
+                      color={Colors.GRAY_MED} 
+                    />
+                  </ThemedView>
+                )}
+                {isEditing && (
+                  <Button 
+                    title={avatarUploading ? "Uploading..." : "Change Avatar"} 
+                    onPress={handleAvatarUpload}
+                    disabled={avatarUploading}
+                  />
+                )}
+                <Button 
+                  title={!isEditing ? "Edit Profile" : "Save Changes"} 
+                  onPress={!isEditing ? startEdit : saveProfile}
+                  style={{ marginTop: Spacing.LIST_GAP }}
                 />
-                <ThemedText style={styles.userEmail}>{email}</ThemedText>
+                {isEditing && (
+                  <Button 
+                    title="Cancel" 
+                    variant="secondary" 
+                    onPress={cancelEdit}
+                    style={{ marginTop: Spacing.LIST_GAP }}
+                  />
+                )}
               </>
             ) : (
               <>
-                <ThemedText type="title">{name || 'User'}</ThemedText>
-                <ThemedText style={styles.userEmail}>{email}</ThemedText>
+                <ThemedText type="title">Create Your Profile</ThemedText>
+                <ThemedText>Please fill in your information to get started</ThemedText>
+                <Button 
+                  title="Make Profile" 
+                  onPress={() => setShowProfileForm(true)}
+                />
               </>
             )}
-          </View>
-          {!isEditing && (
-            <TouchableOpacity 
-              style={styles.editButton}
-              onPress={() => setIsEditing(true)}
-            >
-              <IconSymbol 
-                name="pencil" 
-                size={20} 
-                color={Colors.ICON} 
+          </ThemedView>
+
+          {showProfileForm && (
+            <ThemedView style={styles.profileForm}>
+              <Input
+                placeholder="Full Name"
+                value={name}
+                onChangeText={setName}
               />
-            </TouchableOpacity>
-          )}
-        </View>
+              <Input
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+              />
+              <Input
+                placeholder="Phone Number"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+              />
+              <Input
+                placeholder="Age"
+                value={age}
+                onChangeText={setAge}
+                keyboardType="numeric"
+              />
+              <Input
+                placeholder="Home Address"
+                value={homeAddress}
+                onChangeText={setHomeAddress}
+              />
+              
+              {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
 
-        {/* Additional Profile Fields */}
-        {isEditing && (
-          <View style={styles.additionalFields}>
-            <Input
-              label="Phone Number"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              placeholder="Enter phone number"
-              keyboardType="phone-pad"
-              style={styles.inputField}
-            />
-            
-            <Input
-              label="Location (Optional)"
-              value={location}
-              onChangeText={setLocation}
-              placeholder="Enter location"
-              style={styles.inputField}
-            />
-            
-            <View style={styles.genderContainer}>
-              <ThemedText style={styles.label}>Gender</ThemedText>
-              <View style={styles.genderOptions}>
-                <TouchableOpacity 
-                  style={[styles.genderOption, gender === 'male' && styles.selectedGender]}
-                  onPress={() => setGender('male')}
-                >
-                  <ThemedText>Male</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.genderOption, gender === 'female' && styles.selectedGender]}
-                  onPress={() => setGender('female')}
-                >
-                  <ThemedText>Female</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.genderOption, gender === 'other' && styles.selectedGender]}
-                  onPress={() => setGender('other')}
-                >
-                  <ThemedText>Other</ThemedText>
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            <Input
-              label="Age"
-              value={age}
-              onChangeText={setAge}
-              placeholder="Enter age"
-              keyboardType="numeric"
-              style={styles.inputField}
-            />
-          </View>
-        )}
-
-        {/* Action Buttons */}
-        {isEditing ? (
-          <View style={styles.actionButtons}>
-            <Button 
-              title={isSaving ? "Saving..." : "Save"} 
-              onPress={handleSaveProfile}
-              disabled={isSaving}
-              style={styles.actionButton}
-            />
-            <Button 
-              title="Cancel" 
-              variant="secondary" 
-              onPress={handleCancelEdit}
-              disabled={isSaving}
-              style={styles.actionButton}
-            />
-          </View>
-        ) : (
-          <View style={styles.actionButtons}>
-            <Button 
-              title="Logout" 
-              variant="secondary" 
-              onPress={handleLogout}
-              style={styles.logoutButton}
-            />
-          </View>
-        )}
-
-        {/* My Listings */}
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          My Listings
-        </ThemedText>
-        {listings.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <ThemedText>No listings yet.</ThemedText>
-          </View>
-        ) : (
-          <View style={styles.listingsContainer}>
-            {listings.map((listing) => (
-              <View key={listing.id} style={styles.listingItem}>
-                <ProductCard 
-                  title={listing.title}
-                  price={`$${listing.price}`}
-                  imageUrl={listing.images?.[0] || 'https://picsum.photos/300/300?random=1'}
-                  sellerName={listing.sellerName || (name || 'Unknown Seller')}
-                  rating={listing.rating || 0}
-                  onPress={() => console.log('Listing pressed')}
+              <ThemedView style={styles.actions}>
+                <Button 
+                  title={saving ? 'Saving…' : 'Save Profile'} 
+                  onPress={makeProfile} 
+                  disabled={saving}
                 />
-                {isEditing && (
-                  <View style={styles.listingActions}>
-                    <TouchableOpacity 
-                      style={[styles.actionIcon, styles.editIcon]}
-                      onPress={() => console.log('Edit listing')}
-                    >
-                      <IconSymbol name="pencil" size={20} color={Colors.BG_LIGHT} />
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.actionIcon, styles.deleteIcon]}
-                      onPress={() => console.log('Delete listing')}
-                    >
-                      <IconSymbol name="trash" size={20} color={Colors.BG_LIGHT} />
-                    </TouchableOpacity>
-                  </View>
+                <Button 
+                  title="Cancel" 
+                  variant="secondary" 
+                  onPress={() => setShowProfileForm(false)} 
+                  disabled={saving}
+                />
+              </ThemedView>
+            </ThemedView>
+          )}
+
+          {profileExists && !showProfileForm && (
+            <>
+              {isEditing && (
+                <ThemedView style={styles.editSection}>
+                  <Input
+                    placeholder="Phone Number"
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType="phone-pad"
+                  />
+                  <Input
+                    placeholder="Location"
+                    value={location}
+                    onChangeText={setLocation}
+                  />
+                  <Input
+                    placeholder="Gender"
+                    value={gender}
+                    onChangeText={(text) => setGender(text as Gender)}
+                  />
+                  <Input
+                    placeholder="Age"
+                    value={age}
+                    onChangeText={setAge}
+                    keyboardType="numeric"
+                  />
+                  <Input
+                    placeholder="Home Address"
+                    value={homeAddress}
+                    onChangeText={setHomeAddress}
+                  />
+                </ThemedView>
+              )}
+
+              {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
+
+              <ThemedView style={styles.actions}>
+                {isEditing ? (
+                  <>
+                    <Button title={saving ? 'Saving…' : 'Save'} onPress={saveProfile} disabled={saving} />
+                    <Button title="Cancel" variant="secondary" onPress={cancelEdit} disabled={saving} />
+                  </>
+                ) : (
+                  <Button
+                    title="Logout"
+                    variant="secondary"
+                    onPress={() => auth.signOut()}
+                  />
                 )}
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
+              </ThemedView>
+            </>
+          )}
+
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            My Listings
+          </ThemedText>
+
+          {listings.length === 0 ? (
+            <ThemedText style={styles.empty}>No listings yet</ThemedText>
+          ) : (
+            <ThemedView style={styles.grid}>
+              {listings.map((item) => (
+                <ThemedView key={item.id} style={styles.listingItem}>
+                  <ThemedText>{item.title}</ThemedText>
+                  {isEditing && (
+                    <Button 
+                      title="Delete" 
+                      variant="secondary" 
+                      onPress={() => deleteListing(item.id, item.title)} 
+                    />
+                  )}
+                </ThemedView>
+              ))}
+            </ThemedView>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.BG_LIGHT,
+  container: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scroll: { padding: Spacing.SCREEN_PADDING },
+  profileHeader: { alignItems: 'center', marginBottom: Spacing.SECTION_GAP },
+  avatar: { width: 100, height: 100, borderRadius: 50, marginVertical: Spacing.COMPONENT },
+  editSection: { gap: Spacing.LIST_GAP, marginVertical: Spacing.COMPONENT },
+  profileForm: { gap: Spacing.LIST_GAP, marginVertical: Spacing.COMPONENT },
+  actions: { gap: Spacing.LIST_GAP, marginVertical: Spacing.SECTION_GAP },
+  sectionTitle: { marginTop: Spacing.SECTION_GAP, marginBottom: Spacing.COMPONENT },
+  error: { color: Colors.ALERT_RED, textAlign: 'center', marginVertical: Spacing.LIST_GAP },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  listingItem: { 
+    width: '48%', 
+    padding: Spacing.COMPONENT, 
+    backgroundColor: Colors.BG_ALT, 
+    borderRadius: Radii.CARD, 
+    marginVertical: Spacing.LIST_GAP 
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: Spacing.LIST_GAP,
-    color: Colors.GRAY_MED,
-  },
-  contentContainer: {
-    padding: Spacing.SCREEN_PADDING,
-  },
-  errorText: {
-    color: Colors.ALERT_RED,
-    textAlign: 'center',
-    marginBottom: Spacing.LIST_GAP,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.SECTION_GAP,
-  },
-  avatarContainer: {
-    position: 'relative',
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: Radii.CIRCLE,
-  },
-  changeAvatarButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: Colors.PRIMARY_START,
-    width: 32,
-    height: 32,
-    borderRadius: Radii.CIRCLE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.BG_LIGHT,
-  },
-  userInfo: {
-    flex: 1,
-    marginLeft: Spacing.COMPONENT,
-  },
-  nameInput: {
-    marginBottom: Spacing.LIST_GAP,
-  },
-  userEmail: {
-    color: Colors.GRAY_MED,
-    marginTop: Spacing.LIST_GAP,
-  },
-  editButton: {
-    padding: Spacing.LIST_GAP,
-  },
-  additionalFields: {
-    marginBottom: Spacing.SECTION_GAP,
-  },
-  inputField: {
-    marginBottom: Spacing.LIST_GAP,
-  },
-  genderContainer: {
-    marginBottom: Spacing.LIST_GAP,
-  },
-  label: {
-    marginBottom: Spacing.LIST_GAP,
-    fontWeight: '600',
-  },
-  genderOptions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  genderOption: {
-    flex: 1,
-    padding: Spacing.LIST_GAP,
-    marginHorizontal: Spacing.LIST_GAP,
-    borderWidth: 1,
-    borderColor: Colors.GRAY_LIGHT,
-    borderRadius: Radii.BUTTON,
-    alignItems: 'center',
-  },
-  selectedGender: {
-    backgroundColor: Colors.PRIMARY_START,
-    borderColor: Colors.PRIMARY_START,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.SECTION_GAP,
-  },
-  actionButton: {
-    flex: 1,
-    marginHorizontal: Spacing.LIST_GAP,
-  },
-  logoutButton: {
-    flex: 1,
-  },
-  sectionTitle: {
-    marginBottom: Spacing.LIST_GAP,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: Spacing.SECTION_GAP,
-  },
-  listingsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  listingItem: {
-    width: '48%',
-    marginBottom: Spacing.LIST_GAP,
-    position: 'relative',
-  },
-  listingActions: {
-    position: 'absolute',
-    top: Spacing.COMPONENT,
-    right: Spacing.COMPONENT,
-    flexDirection: 'row',
-  },
-  actionIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: Radii.CIRCLE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: Spacing.LIST_GAP,
-  },
-  editIcon: {
-    backgroundColor: Colors.PRIMARY_START,
-  },
-  deleteIcon: {
-    backgroundColor: Colors.ALERT_RED,
-  },
+  empty: { textAlign: 'center', color: Colors.GRAY_MED, marginTop: Spacing.SECTION_GAP },
 });

@@ -7,9 +7,10 @@ import { Avatar } from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
 import { db, auth } from '@/src/firebase';
-import { collection, query, orderBy, onSnapshot, where, limit, doc, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, limit, doc, getDocs, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { getUserProfile } from '@/utils/userProfile';
 
 export default function ChatListScreen() {
   const router = useRouter();
@@ -65,27 +66,62 @@ export default function ChatListScreen() {
             const messagesSnapshot = await getDocs(messagesQuery);
             let lastMessage = null;
             let timestamp = new Date();
+            let isSentByCurrentUser = false;
             
             if (!messagesSnapshot.empty) {
               const messageDoc = messagesSnapshot.docs[0];
               const messageData = messageDoc.data();
               lastMessage = messageData.text;
               timestamp = messageData.timestamp?.toDate() || new Date();
+              isSentByCurrentUser = messageData.senderId === currentUser.uid;
             }
             
-            // Fetch user info for the other participant
-            // In a real app, you'd have a users collection
-            const otherUserName = `User ${otherParticipantId.substring(0, 6)}`;
-            const otherUserAvatar = `https://picsum.photos/200/200?random=${Math.floor(Math.random() * 100)}`;
+            // Count unread messages
+            let unreadCount = 0;
+            try {
+              // Query all messages in the chat
+              const allMessagesQuery = query(
+                collection(db, 'chats', chatId, 'messages')
+              );
+              
+              const allMessagesSnapshot = await getDocs(allMessagesQuery);
+              
+              // Count messages that haven't been read by the current user
+              allMessagesSnapshot.forEach((msgDoc) => {
+                const msgData = msgDoc.data();
+                // Check if readBy array exists and doesn't include current user
+                if (!msgData.readBy || !msgData.readBy.includes(currentUser.uid)) {
+                  unreadCount++;
+                }
+              });
+            } catch (error) {
+              console.error('Error counting unread messages:', error);
+            }
+            
+            // Fetch user info for the other participant from Firestore
+            let otherUserName = `User ${otherParticipantId.substring(0, 6)}`;
+            let otherUserAvatar = `https://picsum.photos/200/200?random=${Math.floor(Math.random() * 100)}`;
+            
+            try {
+              const userProfile = await getUserProfile(otherParticipantId);
+              if (userProfile) {
+                otherUserName = userProfile.fullname || otherUserName;
+                otherUserAvatar = userProfile.photoURL || otherUserAvatar;
+              }
+            } catch (error) {
+              console.error('Error fetching user profile:', error);
+              // Fall back to placeholder values
+            }
             
             return {
               id: chatId,
               name: otherUserName,
               lastMessage,
               timestamp,
-              unread: 0, // In a real app, you'd track unread messages
+              unread: unreadCount,
               avatar: otherUserAvatar,
-              otherUserId: otherParticipantId
+              otherUserId: otherParticipantId,
+              isSentByCurrentUser
             };
           }
           return null;
@@ -134,7 +170,22 @@ export default function ChatListScreen() {
     return () => unsubscribe();
   }, [currentUser]);
 
-  const handleChatPress = (otherUserId: string, chatId: string) => {
+  const handleChatPress = async (otherUserId: string, chatId: string) => {
+    // Mark messages as read when entering chat
+    try {
+      const messagesSnap = await getDocs(collection(db, 'chats', chatId, 'messages'));
+      const updatePromises = messagesSnap.docs.map(async (docMsg) => {
+        const msgRef = doc(db, 'chats', chatId, 'messages', docMsg.id);
+        return updateDoc(msgRef, {
+          readBy: arrayUnion(currentUser.uid)
+        });
+      });
+      
+      await Promise.all(updatePromises);
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+    
     router.push({
       pathname: '/(tabs)/chat-room',
       params: { sellerId: otherUserId, chatId }
@@ -146,24 +197,37 @@ export default function ChatListScreen() {
       style={styles.chatItem}
       onPress={() => handleChatPress(item.otherUserId, item.id)}
     >
-      <Avatar source={item.avatar} size={56} />
+      <View style={styles.avatarContainer}>
+        <Avatar source={item.avatar} size={56} />
+        {item.unread > 0 && (
+          <View style={styles.unreadBadge}>
+            <ThemedText style={styles.unreadText}>{item.unread}</ThemedText>
+          </View>
+        )}
+      </View>
       <View style={styles.chatInfo}>
         <ThemedText type="defaultSemiBold">{item.name}</ThemedText>
-        {item.lastMessage && (
-          <ThemedText style={styles.lastMessage} numberOfLines={1}>
-            {item.lastMessage}
-          </ThemedText>
-        )}
+        <View style={styles.lastMessageContainer}>
+          {item.lastMessage && (
+            <ThemedText style={styles.lastMessage} numberOfLines={1}>
+              {item.lastMessage}
+            </ThemedText>
+          )}
+          {item.lastMessage && (
+            <View style={styles.messageIndicator}>
+              {item.isSentByCurrentUser ? (
+                <IconSymbol name="chevron.right" size={12} color={Colors.GRAY_MED} />
+              ) : (
+                <IconSymbol name="chevron.left" size={12} color={Colors.PRIMARY_START} />
+              )}
+            </View>
+          )}
+        </View>
       </View>
       <View style={styles.chatMeta}>
         <ThemedText style={styles.timestamp}>
           {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </ThemedText>
-        {item.unread > 0 && (
-          <View style={styles.badge}>
-            <ThemedText style={styles.badgeText}>{item.unread}</ThemedText>
-          </View>
-        )}
       </View>
     </TouchableOpacity>
   );
@@ -274,5 +338,33 @@ const styles = StyleSheet.create({
     marginTop: Spacing.LIST_GAP,
     color: Colors.GRAY_MED,
     textAlign: 'center',
+  },
+  avatarContainer: {
+    position: 'relative',
+  },
+  messageIndicator: {
+    marginLeft: 4,
+  },
+  lastMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  unreadBadge: {
+    backgroundColor: Colors.PRIMARY_START,
+    borderRadius: 8,
+    minWidth: 16,
+    paddingHorizontal: 4,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    top: 0,
+    right: 0,
+  },
+  unreadText: {
+    color: Colors.BG_LIGHT,
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });

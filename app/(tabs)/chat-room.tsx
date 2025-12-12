@@ -13,6 +13,94 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { createOrGetChatRoom } from '@/utils/chatUtils';
 import { getUserProfile } from '@/utils/userProfile';
 
+// Define styles at the top to avoid reference errors
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.BG_LIGHT,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: Spacing.LIST_GAP,
+    color: Colors.GRAY_MED,
+  },
+  messagesContainer: {
+    padding: Spacing.SCREEN_PADDING,
+  },
+  messageContainer: {
+    flexDirection: 'row',
+    marginVertical: Spacing.LIST_GAP,
+  },
+  currentUserMessage: {
+    justifyContent: 'flex-end',
+  },
+  otherUserMessage: {
+    justifyContent: 'flex-start',
+  },
+  messageBubble: {
+    maxWidth: '80%',
+    padding: Spacing.LIST_GAP,
+    borderRadius: Radii.BUTTON,
+  },
+  currentUserBubble: {
+    backgroundColor: Colors.PRIMARY_START,
+    marginLeft: Spacing.COMPONENT,
+  },
+  otherUserBubble: {
+    backgroundColor: Colors.GRAY_LIGHT,
+    marginRight: Spacing.COMPONENT,
+  },
+  senderName: {
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  messageText: {
+    color: Colors.TEXT,
+  },
+  currentUserText: {
+    color: Colors.BG_LIGHT,
+  },
+  otherUserText: {
+    color: Colors.TEXT,
+  },
+  messageTime: {
+    fontSize: 10,
+    color: Colors.GRAY_MED,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: Spacing.SCREEN_PADDING,
+    paddingBottom: Spacing.COMPONENT,
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.GRAY_LIGHT,
+    borderRadius: Radii.BUTTON,
+    padding: Spacing.LIST_GAP,
+    maxHeight: 100,
+    marginRight: Spacing.LIST_GAP,
+  },
+  sendButton: {
+    backgroundColor: Colors.PRIMARY_START,
+    width: 40,
+    height: 40,
+    borderRadius: Radii.CIRCLE,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: Colors.GRAY_MED,
+  },
+});
+
 export default function ChatRoomScreen() {
   const router = useRouter();
   // Get sellerId and chatId from route params
@@ -200,7 +288,7 @@ export default function ChatRoomScreen() {
       ]}>
         {!isCurrentUser && (
           <Avatar 
-            source={item.senderAvatar || 'https://picsum.photos/200/200?random=5'} 
+            source={item.senderAvatar} 
             size={32} 
           />
         )}
@@ -211,7 +299,15 @@ export default function ChatRoomScreen() {
           {!isCurrentUser && (
             <ThemedText style={styles.senderName}>{item.senderName}</ThemedText>
           )}
-          <ThemedText style={styles.messageText}>{item.text}</ThemedText>
+          <ThemedText style={[
+            styles.messageText,
+            isCurrentUser ? styles.currentUserText : styles.otherUserText
+          ]}>
+            {item.text}
+          </ThemedText>
+          <ThemedText style={styles.messageTime}>
+            {item.timestamp?.toDate?.().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'Just now'}
+          </ThemedText>
         </View>
       </View>
     );
@@ -222,7 +318,7 @@ export default function ChatRoomScreen() {
       <ThemedView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.PRIMARY_START} />
-          <ThemedText style={styles.loadingText}>Loading chat...</ThemedText>
+          <ThemedText style={styles.loadingText}>Loading messages...</ThemedText>
         </View>
       </ThemedView>
     );
@@ -231,112 +327,38 @@ export default function ChatRoomScreen() {
   return (
     <ProtectedRoute redirectTo="/(tabs)/chat-room">
       <ThemedView style={styles.container}>
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          contentContainerStyle={styles.messagesContainer}
-          inverted={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        />
-
         <KeyboardAvoidingView 
+          style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.inputContainer}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
-          <TextInput
-            style={styles.textInput}
-            value={message}
-            onChangeText={setMessage}
-            placeholder="Type a message..."
-            multiline
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessage}
+            contentContainerStyle={styles.messagesContainer}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           />
-          <TouchableOpacity 
-            style={styles.sendButton}
-            onPress={handleSend}
-            disabled={!message.trim()}
-          >
-            <IconSymbol 
-              name="paperplane.fill" 
-              size={20} 
-              color={message.trim() ? Colors.BG_LIGHT : Colors.GRAY_MED} 
+          
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.textInput}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="Type a message..."
+              multiline
             />
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
+              onPress={handleSend}
+              disabled={!message.trim()}
+            >
+              <IconSymbol name="paperplane.fill" size={20} color={Colors.BG_LIGHT} />
+            </TouchableOpacity>
+          </View>
         </KeyboardAvoidingView>
       </ThemedView>
     </ProtectedRoute>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.BG_LIGHT,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: Spacing.LIST_GAP,
-    color: Colors.GRAY_MED,
-  },
-  messagesContainer: {
-    padding: Spacing.SCREEN_PADDING,
-  },
-  messageContainer: {
-    flexDirection: 'row',
-    marginVertical: Spacing.LIST_GAP,
-  },
-  currentUserMessage: {
-    justifyContent: 'flex-end',
-  },
-  otherUserMessage: {
-    justifyContent: 'flex-start',
-  },
-  messageBubble: {
-    maxWidth: '80%',
-    padding: Spacing.LIST_GAP,
-    borderRadius: Radii.BUTTON,
-  },
-  currentUserBubble: {
-    backgroundColor: Colors.PRIMARY_START,
-    marginLeft: Spacing.COMPONENT,
-  },
-  otherUserBubble: {
-    backgroundColor: Colors.GRAY_LIGHT,
-    marginRight: Spacing.COMPONENT,
-  },
-  senderName: {
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  messageText: {
-    color: Colors.TEXT,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: Spacing.SCREEN_PADDING,
-    paddingBottom: Spacing.COMPONENT,
-  },
-  textInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.GRAY_LIGHT,
-    borderRadius: Radii.BUTTON,
-    padding: Spacing.LIST_GAP,
-    maxHeight: 100,
-    marginRight: Spacing.LIST_GAP,
-  },
-  sendButton: {
-    backgroundColor: Colors.PRIMARY_START,
-    width: 40,
-    height: 40,
-    borderRadius: Radii.CIRCLE,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});

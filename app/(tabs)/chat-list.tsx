@@ -293,6 +293,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.GRAY_LIGHT,
   },
+  avatarContainer: {
+    position: 'relative',
+  },
   chatInfo: {
     flex: 1,
     marginLeft: Spacing.COMPONENT,
@@ -300,6 +303,14 @@ const styles = StyleSheet.create({
   lastMessage: {
     color: Colors.GRAY_MED,
     marginTop: 4,
+  },
+  lastMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  messageIndicator: {
+    marginLeft: 4,
   },
   chatMeta: {
     alignItems: 'flex-end',
@@ -309,16 +320,19 @@ const styles = StyleSheet.create({
     color: Colors.GRAY_MED,
     fontSize: 12,
   },
-  badge: {
+  unreadBadge: {
     backgroundColor: Colors.PRIMARY_START,
-    borderRadius: Radii.CIRCLE,
-    width: 20,
-    height: 20,
+    borderRadius: 8,
+    minWidth: 16,
+    paddingHorizontal: 4,
+    height: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
+    position: 'absolute',
+    top: 0,
+    right: 0,
   },
-  badgeText: {
+  unreadText: {
     color: Colors.BG_LIGHT,
     fontSize: 10,
     fontWeight: 'bold',
@@ -338,33 +352,5 @@ const styles = StyleSheet.create({
     marginTop: Spacing.LIST_GAP,
     color: Colors.GRAY_MED,
     textAlign: 'center',
-  },
-  avatarContainer: {
-    position: 'relative',
-  },
-  messageIndicator: {
-    marginLeft: 4,
-  },
-  lastMessageContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  unreadBadge: {
-    backgroundColor: Colors.PRIMARY_START,
-    borderRadius: 8,
-    minWidth: 16,
-    paddingHorizontal: 4,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'absolute',
-    top: 0,
-    right: 0,
-  },
-  unreadText: {
-    color: Colors.BG_LIGHT,
-    fontSize: 10,
-    fontWeight: 'bold',
   },
 });

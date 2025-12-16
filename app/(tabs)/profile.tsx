@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -282,190 +283,192 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <ThemedView style={styles.profileHeader}>
-            {profileExists ? (
-              <>
-                <ThemedText type="title">{name}</ThemedText>
-                <ThemedText>{email}</ThemedText>
-                {(selectedAvatar || avatarUrl) ? (
-                  <Image 
-                    source={{ uri: selectedAvatar || avatarUrl }} 
-                    style={styles.avatar} 
-                  />
-                ) : (
-                  <ThemedView style={[styles.avatar, { backgroundColor: Colors.BG_ALT, justifyContent: 'center', alignItems: 'center' }]}>                    <IconSymbol 
+    <NavWrapper>
+      <ThemedView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <ScrollView contentContainerStyle={styles.scroll}>
+            <ThemedView style={styles.profileHeader}>
+              {profileExists ? (
+                <>
+                  <ThemedText type="title">{name}</ThemedText>
+                  <ThemedText>{email}</ThemedText>
+                  {(selectedAvatar || avatarUrl) ? (
+                    <Image 
+                      source={{ uri: selectedAvatar || avatarUrl }} 
+                      style={styles.avatar} 
+                    />
+                  ) : (
+                    <ThemedView style={[styles.avatar, { backgroundColor: Colors.BG_ALT, justifyContent: 'center', alignItems: 'center' }]}>                    <IconSymbol 
                       name="person.fill" 
                       size={40} 
                       color={Colors.GRAY_MED} 
                     />
                   </ThemedView>
-                )}
-                {isEditing && (
+                  )}
+                  {isEditing && (
+                    <Button 
+                      title={avatarUploading ? "Uploading..." : "Change Avatar"} 
+                      onPress={handleAvatarUpload}
+                      disabled={avatarUploading}
+                    />
+                  )}
                   <Button 
-                    title={avatarUploading ? "Uploading..." : "Change Avatar"} 
-                    onPress={handleAvatarUpload}
-                    disabled={avatarUploading}
+                    title={!isEditing ? "Edit Profile" : "Save Changes"} 
+                    onPress={!isEditing ? startEdit : saveProfile}
+                    style={{ marginTop: Spacing.LIST_GAP }}
                   />
-                )}
-                <Button 
-                  title={!isEditing ? "Edit Profile" : "Save Changes"} 
-                  onPress={!isEditing ? startEdit : saveProfile}
-                  style={{ marginTop: Spacing.LIST_GAP }}
+                  {isEditing && (
+                    <Button 
+                      title="Cancel" 
+                      variant="secondary" 
+                      onPress={cancelEdit}
+                      style={{ marginTop: Spacing.LIST_GAP }}
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  <ThemedText type="title">Create Your Profile</ThemedText>
+                  <ThemedText>Please fill in your information to get started</ThemedText>
+                  <Button 
+                    title="Make Profile" 
+                    onPress={() => setShowProfileForm(true)}
+                  />
+                </>
+              )}
+            </ThemedView>
+
+            {showProfileForm && (
+              <ThemedView style={styles.profileForm}>
+                <Input
+                  placeholder="Full Name"
+                  value={name}
+                  onChangeText={setName}
                 />
-                {isEditing && (
+                <Input
+                  placeholder="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                />
+                <Input
+                  placeholder="Phone Number"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                />
+                <Input
+                  placeholder="Age"
+                  value={age}
+                  onChangeText={setAge}
+                  keyboardType="numeric"
+                />
+                <Input
+                  placeholder="Home Address"
+                  value={homeAddress}
+                  onChangeText={setHomeAddress}
+                />
+                
+                {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
+
+                <ThemedView style={styles.actions}>
+                  <Button 
+                    title={saving ? 'Saving…' : 'Save Profile'} 
+                    onPress={makeProfile} 
+                    disabled={saving}
+                  />
                   <Button 
                     title="Cancel" 
                     variant="secondary" 
-                    onPress={cancelEdit}
-                    style={{ marginTop: Spacing.LIST_GAP }}
-                  />
-                )}
-              </>
-            ) : (
-              <>
-                <ThemedText type="title">Create Your Profile</ThemedText>
-                <ThemedText>Please fill in your information to get started</ThemedText>
-                <Button 
-                  title="Make Profile" 
-                  onPress={() => setShowProfileForm(true)}
-                />
-              </>
-            )}
-          </ThemedView>
-
-          {showProfileForm && (
-            <ThemedView style={styles.profileForm}>
-              <Input
-                placeholder="Full Name"
-                value={name}
-                onChangeText={setName}
-              />
-              <Input
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-              />
-              <Input
-                placeholder="Phone Number"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
-              />
-              <Input
-                placeholder="Age"
-                value={age}
-                onChangeText={setAge}
-                keyboardType="numeric"
-              />
-              <Input
-                placeholder="Home Address"
-                value={homeAddress}
-                onChangeText={setHomeAddress}
-              />
-              
-              {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-
-              <ThemedView style={styles.actions}>
-                <Button 
-                  title={saving ? 'Saving…' : 'Save Profile'} 
-                  onPress={makeProfile} 
-                  disabled={saving}
-                />
-                <Button 
-                  title="Cancel" 
-                  variant="secondary" 
-                  onPress={() => setShowProfileForm(false)} 
-                  disabled={saving}
-                />
-              </ThemedView>
-            </ThemedView>
-          )}
-
-          {profileExists && !showProfileForm && (
-            <>
-              {isEditing && (
-                <ThemedView style={styles.editSection}>
-                  <Input
-                    placeholder="Phone Number"
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    keyboardType="phone-pad"
-                  />
-                  <Input
-                    placeholder="Location"
-                    value={location}
-                    onChangeText={setLocation}
-                  />
-                  <Input
-                    placeholder="Gender"
-                    value={gender}
-                    onChangeText={(text) => setGender(text as Gender)}
-                  />
-                  <Input
-                    placeholder="Age"
-                    value={age}
-                    onChangeText={setAge}
-                    keyboardType="numeric"
-                  />
-                  <Input
-                    placeholder="Home Address"
-                    value={homeAddress}
-                    onChangeText={setHomeAddress}
+                    onPress={() => setShowProfileForm(false)} 
+                    disabled={saving}
                   />
                 </ThemedView>
-              )}
-
-              {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
-
-              <ThemedView style={styles.actions}>
-                {isEditing ? (
-                  <>
-                    <Button title={saving ? 'Saving…' : 'Save'} onPress={saveProfile} disabled={saving} />
-                    <Button title="Cancel" variant="secondary" onPress={cancelEdit} disabled={saving} />
-                  </>
-                ) : (
-                  <Button
-                    title="Logout"
-                    variant="secondary"
-                    onPress={() => auth.signOut()}
-                  />
-                )}
               </ThemedView>
-            </>
-          )}
+            )}
 
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            My Listings
-          </ThemedText>
+            {profileExists && !showProfileForm && (
+              <>
+                {isEditing && (
+                  <ThemedView style={styles.editSection}>
+                    <Input
+                      placeholder="Phone Number"
+                      value={phoneNumber}
+                      onChangeText={setPhoneNumber}
+                      keyboardType="phone-pad"
+                    />
+                    <Input
+                      placeholder="Location"
+                      value={location}
+                      onChangeText={setLocation}
+                    />
+                    <Input
+                      placeholder="Gender"
+                      value={gender}
+                      onChangeText={(text) => setGender(text as Gender)}
+                    />
+                    <Input
+                      placeholder="Age"
+                      value={age}
+                      onChangeText={setAge}
+                      keyboardType="numeric"
+                    />
+                    <Input
+                      placeholder="Home Address"
+                      value={homeAddress}
+                      onChangeText={setHomeAddress}
+                    />
+                  </ThemedView>
+                )}
 
-          {listings.length === 0 ? (
-            <ThemedText style={styles.empty}>No listings yet</ThemedText>
-          ) : (
-            <ThemedView style={styles.grid}>
-              {listings.map((item) => (
-                <ThemedView key={item.id} style={styles.listingItem}>
-                  <ThemedText>{item.title}</ThemedText>
-                  {isEditing && (
-                    <Button 
-                      title="Delete" 
-                      variant="secondary" 
-                      onPress={() => deleteListing(item.id, item.title)} 
+                {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
+
+                <ThemedView style={styles.actions}>
+                  {isEditing ? (
+                    <>
+                      <Button title={saving ? 'Saving…' : 'Save'} onPress={saveProfile} disabled={saving} />
+                      <Button title="Cancel" variant="secondary" onPress={cancelEdit} disabled={saving} />
+                    </>
+                  ) : (
+                    <Button
+                      title="Logout"
+                      variant="secondary"
+                      onPress={() => auth.signOut()}
                     />
                   )}
                 </ThemedView>
-              ))}
-            </ThemedView>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </ThemedView>
+              </>
+            )}
+
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              My Listings
+            </ThemedText>
+
+            {listings.length === 0 ? (
+              <ThemedText style={styles.empty}>No listings yet</ThemedText>
+            ) : (
+              <ThemedView style={styles.grid}>
+                {listings.map((item) => (
+                  <ThemedView key={item.id} style={styles.listingItem}>
+                    <ThemedText>{item.title}</ThemedText>
+                    {isEditing && (
+                      <Button 
+                        title="Delete" 
+                        variant="secondary" 
+                        onPress={() => deleteListing(item.id, item.title)} 
+                      />
+                    )}
+                  </ThemedView>
+                ))}
+              </ThemedView>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </ThemedView>
+    </NavWrapper>
   );
 }
 

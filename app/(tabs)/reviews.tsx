@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
 import { StarRating } from '@/components/ui/star-rating';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -201,83 +202,85 @@ export default function ReviewsScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <ThemedText type="title">Reviews</ThemedText>
-        <View style={styles.ratingSummary}>
-          <ThemedText type="subtitle" style={styles.averageRating}>
-            {averageRating.toFixed(1)}
-          </ThemedText>
-          <StarRating rating={averageRating} size={20} />
-          <ThemedText style={styles.totalReviews}>
-            ({totalReviews} reviews)
-          </ThemedText>
-        </View>
-      </View>
-
-      {/* Error message */}
-      {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
-
-      {/* Action Button */}
-      <Button 
-        title={showReviewForm ? "Cancel" : "Write a Review"} 
-        variant="secondary" 
-        onPress={() => setShowReviewForm(!showReviewForm)}
-        style={styles.actionButton}
-      />
-
-      {/* Review Form */}
-      {showReviewForm && (
-        <View style={[styles.reviewForm, getShadowStyle(Shadows.SOFT)]}>
-          <ThemedText type="subtitle" style={styles.formTitle}>
-            Your Rating
-          </ThemedText>
-          <View style={styles.ratingSelector}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity
-                key={star}
-                style={styles.starButton}
-                onPress={() => setRating(star)}
-              >
-                <StarRating rating={star <= rating ? star : 0} size={32} maxStars={1} />
-              </TouchableOpacity>
-            ))}
+    <NavWrapper>
+      <ThemedView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <ThemedText type="title">Reviews</ThemedText>
+          <View style={styles.ratingSummary}>
+            <ThemedText type="subtitle" style={styles.averageRating}>
+              {averageRating.toFixed(1)}
+            </ThemedText>
+            <StarRating rating={averageRating} size={20} />
+            <ThemedText style={styles.totalReviews}>
+              ({totalReviews} reviews)
+            </ThemedText>
           </View>
-          
-          <View style={styles.textAreaContainer}>
-            <TextInput
-              style={[styles.textArea, getShadowStyle(Shadows.SOFT)]}
-              value={comment}
-              onChangeText={setComment}
-              placeholder="Write your review..."
-              placeholderTextColor={Colors.GRAY_MED}
-              multiline
-              textAlignVertical="top"
+        </View>
+
+        {/* Error message */}
+        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+
+        {/* Action Button */}
+        <Button 
+          title={showReviewForm ? "Cancel" : "Write a Review"} 
+          variant="secondary" 
+          onPress={() => setShowReviewForm(!showReviewForm)}
+          style={styles.actionButton}
+        />
+
+        {/* Review Form */}
+        {showReviewForm && (
+          <View style={[styles.reviewForm, getShadowStyle(Shadows.SOFT)]}>
+            <ThemedText type="subtitle" style={styles.formTitle}>
+              Your Rating
+            </ThemedText>
+            <View style={styles.ratingSelector}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  style={styles.starButton}
+                  onPress={() => setRating(star)}
+                >
+                  <StarRating rating={star <= rating ? star : 0} size={32} maxStars={1} />
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            <View style={styles.textAreaContainer}>
+              <TextInput
+                style={[styles.textArea, getShadowStyle(Shadows.SOFT)]}
+                value={comment}
+                onChangeText={setComment}
+                placeholder="Write your review..."
+                placeholderTextColor={Colors.GRAY_MED}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+            
+            <Button 
+              title="Submit Review" 
+              onPress={handleSubmitReview}
+              disabled={loading}
             />
           </View>
-          
-          <Button 
-            title="Submit Review" 
-            onPress={handleSubmitReview}
-            disabled={loading}
-          />
-        </View>
-      )}
+        )}
 
-      {/* Reviews List */}
-      <FlatList
-        data={reviews}
-        keyExtractor={(item) => item.id}
-        renderItem={renderReview}
-        contentContainerStyle={styles.reviewsList}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <ThemedText>No reviews yet. Be the first to review!</ThemedText>
-          </View>
-        }
-      />
-    </ThemedView>
+        {/* Reviews List */}
+        <FlatList
+          data={reviews}
+          keyExtractor={(item) => item.id}
+          renderItem={renderReview}
+          contentContainerStyle={styles.reviewsList}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <ThemedText>No reviews yet. Be the first to review!</ThemedText>
+            </View>
+          }
+        />
+      </ThemedView>
+    </NavWrapper>
   );
 }
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { auth } from '@/src/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import expoNotificationService from '@/src/expoNotificationService';
 
 interface AuthContextType {
   user: User | null;
@@ -55,6 +56,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.warn('Could not remove redirect URL from localStorage:', e);
     }
   };
+
+  // Initialize notifications when user logs in
+  useEffect(() => {
+    const initializeNotifications = async () => {
+      if (user) {
+        try {
+          // Initialize notification service
+          await expoNotificationService.init();
+        } catch (error) {
+          console.error('Error initializing notifications:', error);
+        }
+      }
+    };
+
+    initializeNotifications();
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {

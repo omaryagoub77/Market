@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
 import { Avatar } from '@/components/ui/avatar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
@@ -187,8 +188,8 @@ export default function ChatListScreen() {
     }
     
     router.push({
-      pathname: '/(tabs)/chat-room',
-      params: { sellerId: otherUserId, chatId }
+      pathname: '/screens/chat-room',
+      params: { sellerId: otherUserId, chatId: chatId }
     });
   };
 
@@ -244,27 +245,29 @@ export default function ChatListScreen() {
   }
 
   return (
-    <ProtectedRoute redirectTo="/(tabs)/chat-list">
-      <ThemedView style={styles.container}>
-        <FlatList
-          data={chatData}
-          keyExtractor={(item) => item.id}
-          renderItem={renderChatItem}
-          contentContainerStyle={styles.contentContainer}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <IconSymbol name="message" size={64} color={Colors.GRAY_MED} />
-              <ThemedText style={styles.emptyText}>No conversations yet</ThemedText>
-              <ThemedText style={styles.emptySubtext}>
-                Start chatting with sellers and buyers
-              </ThemedText>
-              <ThemedText style={styles.emptySubtext}>
-                Chats will appear here when you contact sellers
-              </ThemedText>
-            </View>
-          }
-        />
-      </ThemedView>
+    <ProtectedRoute redirectTo="/chat-list">
+      <NavWrapper>
+        <ThemedView style={styles.container}>
+          <FlatList
+            data={chatData}
+            keyExtractor={(item) => item.id}
+            renderItem={renderChatItem}
+            contentContainerStyle={styles.contentContainer}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <IconSymbol name="message" size={64} color={Colors.GRAY_MED} />
+                <ThemedText style={styles.emptyText}>No conversations yet</ThemedText>
+                <ThemedText style={styles.emptySubtext}>
+                  Start chatting with sellers and buyers
+                </ThemedText>
+                <ThemedText style={styles.emptySubtext}>
+                  Chats will appear here when you contact sellers
+                </ThemedText>
+              </View>
+            }
+          />
+        </ThemedView>
+      </NavWrapper>
     </ProtectedRoute>
   );
 }

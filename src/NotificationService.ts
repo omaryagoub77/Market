@@ -355,7 +355,7 @@ class NotificationService implements NotificationServiceInterface {
       // Navigate to chat room
       // In a real implementation, you would use your navigation library
       // For example, with expo-router:
-      // router.push(`/(tabs)/chat-room?chatId=${chatId}&sellerId=${senderId}`);
+      // router.push(`/screens/chat-room?chatId=${chatId}&sellerId=${senderId}`);
       console.log(`Would navigate to chat room: chatId=${chatId}, sellerId=${senderId}`);
     }
   }

@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicato
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
 import { ProductCard } from '@/components/ui/product-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
@@ -97,60 +98,62 @@ export default function MyProductsScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
-        
-        <ThemedText type="title" style={styles.header}>
-          My Products
-        </ThemedText>
-        
-        {products.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <ThemedText style={styles.emptyText}>You haven't posted any products yet.</ThemedText>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => router.push('/post-item')}
-            >
-              <ThemedText style={styles.addButtonText}>Post Your First Product</ThemedText>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.productsContainer}>
-            {products.map((product) => (
-              <View key={product.id} style={styles.productItem}>
-                <ProductCard 
-                  title={product.title}
-                  price={`$${product.price}`}
-                  imageUrl={product.images?.[0] || 'https://picsum.photos/300/300?random=1'}
-                  sellerName={product.ownerName || 'Unknown Seller'}
-                  onPress={() => router.push({
-                    pathname: "../product-detail",
-                    params: { productId: product.id }
-                  })}
-                />
-                <View style={styles.productActions}>
-                  <TouchableOpacity 
-                    style={[styles.actionButton, styles.editButton]}
-                    onPress={() => handleEditProduct(product.id)}
-                  >
-                    <IconSymbol name="pencil" size={16} color={Colors.BG_LIGHT} />
-                    <ThemedText style={styles.buttonText}>Edit</ThemedText>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => handleDeleteProduct(product.id, product.title)}
-                  >
-                    <IconSymbol name="trash" size={16} color={Colors.BG_LIGHT} />
-                    <ThemedText style={styles.buttonText}>Delete</ThemedText>
-                  </TouchableOpacity>
+    <NavWrapper>
+      <ThemedView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.contentContainer}>
+          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+          
+          <ThemedText type="title" style={styles.header}>
+            My Products
+          </ThemedText>
+          
+          {products.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <ThemedText style={styles.emptyText}>You haven't posted any products yet.</ThemedText>
+              <TouchableOpacity 
+                style={styles.addButton}
+                onPress={() => router.push('/post-item')}
+              >
+                <ThemedText style={styles.addButtonText}>Post Your First Product</ThemedText>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.productsContainer}>
+              {products.map((product) => (
+                <View key={product.id} style={styles.productItem}>
+                  <ProductCard 
+                    title={product.title}
+                    price={`$${product.price}`}
+                    imageUrl={product.images?.[0] || 'https://picsum.photos/300/300?random=1'}
+                    sellerName={product.ownerName || 'Unknown Seller'}
+                    onPress={() => router.push({
+                      pathname: "../screens/product-detail",
+                      params: { productId: product.id }
+                    })}
+                  />
+                  <View style={styles.productActions}>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.editButton]}
+                      onPress={() => handleEditProduct(product.id)}
+                    >
+                      <IconSymbol name="pencil" size={16} color={Colors.BG_LIGHT} />
+                      <ThemedText style={styles.buttonText}>Edit</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => handleDeleteProduct(product.id, product.title)}
+                    >
+                      <IconSymbol name="trash" size={16} color={Colors.BG_LIGHT} />
+                      <ThemedText style={styles.buttonText}>Delete</ThemedText>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    </ThemedView>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </ThemedView>
+    </NavWrapper>
   );
 }
 

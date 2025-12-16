@@ -10,7 +10,8 @@ import { AppState } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  // Changed from '(tabs)' to 'home-feed' to directly load the home screen
+  anchor: 'home-feed',
 };
 
 export default function RootLayout() {
@@ -55,8 +56,20 @@ export default function RootLayout() {
     <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          {/* Load all screens for the new navigation system */}
+          <Stack.Screen name="home-feed" options={{ headerShown: false }} />
+          <Stack.Screen name="post-item" options={{ headerShown: false }} />
+          <Stack.Screen name="chat-list" options={{ headerShown: false }} />
+          <Stack.Screen name="my-products" options={{ headerShown: false }} />
+          <Stack.Screen name="favourite" options={{ headerShown: false }} />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
+          <Stack.Screen name="admin" options={{ headerShown: false }} />
+          <Stack.Screen name="reviews" options={{ headerShown: false }} />
+          <Stack.Screen name="more" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack.Screen name="screens/product-detail" options={{ headerShown: false }} />
+          <Stack.Screen name="screens/chat-room" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)/edit-product/[id]" options={{ headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

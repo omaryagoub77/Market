@@ -40,7 +40,7 @@ export default function LoginScreen() {
         router.replace(redirectUrl as any);
       } else {
         // Default redirect to home feed
-        router.replace('/(tabs)/home-feed');
+        router.replace('/home-feed');
       }
     } catch (error: any) {
       console.error('Login error:', error);

@@ -23,7 +23,7 @@ export default function Index() {
       clearRedirectUrl();
       return <Redirect href={redirectUrl as any} />;
     }
-    return <Redirect href="/(tabs)/home-feed" />;
+    return <Redirect href="/home-feed" />;
   }
 
   // If user is not authenticated, redirect to login

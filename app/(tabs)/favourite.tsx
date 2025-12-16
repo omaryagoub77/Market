@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, Text, RefreshControl, ScrollView } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, StyleSheet, FlatList, Text, RefreshControl, ScrollView, Dimensions, Animated } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
+import { ProductCard } from '@/components/ui/product-card';
+import { Button } from '@/components/ui/button';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radii, Shadows } from '@/src/theme';
 import { db } from '@/src/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { ProductCard } from '@/components/ui/product-card';
-import { Button } from '@/components/ui/button';
 import { useRouter } from 'expo-router';
 import { getFavoriteProducts, removeFavoriteProduct } from '@/utils/favoritesUtils';
-// Toast notifications will be implemented using a simple alert for now
 
 interface FavoriteProduct {
   id: string;
@@ -22,10 +23,21 @@ interface FavoriteProduct {
 }
 
 export default function FavoritesScreen() {
+  const router = useRouter();
   const [favoriteProducts, setFavoriteProducts] = useState<FavoriteProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const router = useRouter();
+
+  // Calculate number of columns based on screen width - more conservative breakpoints
+  const numColumns = useMemo(() => {
+    const windowWidth = Dimensions.get('window').width;
+    // Large devices (tablets and desktops) - 4 columns
+    if (windowWidth >= 1024) return 4;
+    // Medium devices (tablets) - 3 columns  
+    if (windowWidth >= 768) return 3;
+    // Small devices (phones) - 2 columns
+    return 2;
+  }, []);
 
   /**
    * Load favorite products from AsyncStorage and fetch their details from Firestore
@@ -100,7 +112,7 @@ export default function FavoritesScreen() {
    * Navigate to product detail screen
    */
   const handleProductPress = (productId: string) => {
-    router.push(`/(tabs)/product-detail?productId=${productId}`);
+    router.push(`/screens/product-detail?productId=${productId}`);
   };
 
   useEffect(() => {
@@ -109,16 +121,19 @@ export default function FavoritesScreen() {
 
   // Render a favorite product item
   const renderFavoriteItem = ({ item }: { item: FavoriteProduct }) => (
-    <View style={styles.productContainer}>
+    <View style={[
+      styles.productItem, 
+      { width: `${100 / numColumns}%` }
+    ]}>
       <ProductCard
         title={item.title}
         price={item.price}
-        imageUrl={item.images[0] || 'https://via.placeholder.com/150'}
+        imageUrl={item.images[0] || 'https://picsum.photos/300/300?random=1'}
         sellerName={item.ownerName}
         rating={item.rating}
         onPress={() => handleProductPress(item.id)}
       />
-      <View style={styles.removeButtonContainer}>
+      <View style={styles.productActions}>
         <Button
           title="Remove"
           variant="secondary"
@@ -132,50 +147,56 @@ export default function FavoritesScreen() {
   // Render empty state
   if (!loading && favoriteProducts.length === 0) {
     return (
-      <ThemedView style={styles.container}>
-        <ScrollView 
-          contentContainerStyle={styles.emptyContainer}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        >
-          <ThemedText type="title" style={styles.emptyTitle}>
-            No Favorites Yet
-          </ThemedText>
-          <ThemedText style={styles.emptyDescription}>
-            Start adding products to your favorites by tapping the "Add to Wishes" button on product pages.
-          </ThemedText>
-          <Button
-            title="Browse Products"
-            onPress={() => router.push('/(tabs)/home-feed')}
-            style={styles.browseButton}
-          />
-        </ScrollView>
-      </ThemedView>
+      <NavWrapper>
+        <ThemedView style={styles.container}>
+          <ScrollView 
+            contentContainerStyle={styles.emptyContainer}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          >
+            <ThemedText type="title" style={styles.emptyTitle}>
+              No Favorites Yet
+            </ThemedText>
+            <ThemedText style={styles.emptyDescription}>
+              Start adding products to your favorites by tapping the "Add to Wishes" button on product pages.
+            </ThemedText>
+            <Button
+              title="Browse Products"
+              onPress={() => router.push('/home-feed')}
+              style={styles.browseButton}
+            />
+          </ScrollView>
+        </ThemedView>
+      </NavWrapper>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <FlatList
-        data={favoriteProducts}
-        renderItem={renderFavoriteItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListHeaderComponent={
-          <ThemedText type="title" style={styles.header}>
-            My Favorites
-          </ThemedText>
-        }
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          loading ? (
-            <View style={styles.loadingContainer}>
-              <ThemedText>Loading favorites...</ThemedText>
-            </View>
-          ) : null
-        }
-      />
-    </ThemedView>
+    <NavWrapper>
+      <ThemedView style={styles.container}>
+        <FlatList
+          data={favoriteProducts}
+          renderItem={renderFavoriteItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.productsGrid}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListHeaderComponent={
+            <ThemedText type="title" style={styles.header}>
+              My Favorites
+            </ThemedText>
+          }
+          showsVerticalScrollIndicator={false}
+          numColumns={numColumns}
+          columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
+          ListEmptyComponent={
+            loading ? (
+              <View style={styles.loadingContainer}>
+                <Text>Loading favorites...</Text>
+              </View>
+            ) : null
+          }
+        />
+      </ThemedView>
+    </NavWrapper>
   );
 }
 
@@ -184,21 +205,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.BG_LIGHT,
   },
-  listContainer: {
-    padding: Spacing.SCREEN_PADDING,
-    paddingTop: Spacing.SECTION_GAP,
-  },
   header: {
     marginBottom: Spacing.SECTION_GAP,
+    marginTop: Spacing.SECTION_GAP,
+    paddingHorizontal: Spacing.SCREEN_PADDING,
   },
-  productContainer: {
-    ...Shadows.SOFT,
-    backgroundColor: Colors.BG_LIGHT,
-    borderRadius: Radii.CARD,
+  productsGrid: {
+    padding: Spacing.SCREEN_PADDING,
+    paddingBottom: Spacing.SECTION_GAP,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+  },
+  productItem: {
     marginBottom: Spacing.LIST_GAP,
-    overflow: 'hidden',
+    position: 'relative',
   },
-  removeButtonContainer: {
+  productActions: {
     padding: Spacing.COMPONENT,
   },
   removeButton: {

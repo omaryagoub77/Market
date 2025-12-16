@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Image, Dimensions, ActivityIndicator } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
 import { StarRating } from '@/components/ui/star-rating';
@@ -93,14 +94,14 @@ export default function ProductDetailScreen() {
       try {
         const chatId = await createOrGetChatRoom(user.uid, product.ownerId);
         router.push({
-          pathname: "/(tabs)/chat-room",
+          pathname: "/screens/chat-room",
           params: { sellerId: product.ownerId, chatId, productId: product.id }
         });
       } catch (error) {
         console.error('Error creating chat room:', error);
         // Fallback to navigation without chatId
         router.push({
-          pathname: "/(tabs)/chat-room",
+          pathname: "/screens/chat-room",
           params: { sellerId: product.ownerId, productId: product.id }
         });
       }
@@ -157,109 +158,111 @@ export default function ProductDetailScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView>
-        {/* Product Images */}
-        <View style={styles.imageSliderContainer}>
-          <ScrollView 
-            horizontal 
-            pagingEnabled 
-            showsHorizontalScrollIndicator={false}
-            style={styles.imageSlider}
-            onScroll={(event) => {
-              const index = Math.round(event.nativeEvent.contentOffset.x / width);
-              setSelectedImageIndex(index);
-            }}
-          >
-            {product.images?.map((image: string, index: number) => (
-              <Image 
-                key={index} 
-                source={{ uri: image }} 
-                style={styles.productImage} 
-              />
-            ))}
-          </ScrollView>
+    <NavWrapper>
+      <ThemedView style={styles.container}>
+        <ScrollView>
+          {/* Product Images */}
+          <View style={styles.imageSliderContainer}>
+            <ScrollView 
+              horizontal 
+              pagingEnabled 
+              showsHorizontalScrollIndicator={false}
+              style={styles.imageSlider}
+              onScroll={(event) => {
+                const index = Math.round(event.nativeEvent.contentOffset.x / width);
+                setSelectedImageIndex(index);
+              }}
+            >
+              {product.images?.map((image: string, index: number) => (
+                <Image 
+                  key={index} 
+                  source={{ uri: image }} 
+                  style={styles.productImage} 
+                />
+              ))}
+            </ScrollView>
 
-          {/* Image Indicators */}
-          <View style={styles.indicatorContainer}>
-            {product.images?.map((_: string, index: number) => (
-              <View 
-                key={index} 
-                style={[
-                  styles.indicator, 
-                  index === selectedImageIndex && styles.activeIndicator
-                ]} 
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* Product Info */}
-        <View style={styles.contentContainer}>
-          <ThemedText type="title" style={styles.title}>
-            {product.title}
-          </ThemedText>
-
-          <View style={styles.priceRatingContainer}>
-            <ThemedText type="subtitle" style={styles.price}>
-              ${product.price}
-            </ThemedText>
-            <View style={styles.ratingContainer}>
-              <StarRating rating={product.rating || 0} size={16} />
-              <ThemedText style={styles.reviewCount}>
-                ({product.reviewCount || 0})
-              </ThemedText>
+            {/* Image Indicators */}
+            <View style={styles.indicatorContainer}>
+              {product.images?.map((_: string, index: number) => (
+                <View 
+                  key={index} 
+                  style={[
+                    styles.indicator, 
+                    index === selectedImageIndex && styles.activeIndicator
+                  ]} 
+                />
+              ))}
             </View>
           </View>
 
-          <ThemedText style={styles.description}>
-            {product.description}
-          </ThemedText>
+          {/* Product Info */}
+          <View style={styles.contentContainer}>
+            <ThemedText type="title" style={styles.title}>
+              {product.title}
+            </ThemedText>
 
-          {/* Size Selection */}
-          {product.sizes && product.sizes.length > 0 && (
-            <>
-              <ThemedText type="subtitle" style={styles.sectionTitle}>
-                Size
+            <View style={styles.priceRatingContainer}>
+              <ThemedText type="subtitle" style={styles.price}>
+                ${product.price}
               </ThemedText>
-              <View style={styles.sizeContainer}>
-                {product.sizes.map((size: string) => (
-                  <Chip
-                    key={size}
-                    title={size}
-                    selected={selectedSize === size}
-                    onPress={() => setSelectedSize(size)}
-                  />
-                ))}
+              <View style={styles.ratingContainer}>
+                <StarRating rating={product.rating || 0} size={16} />
+                <ThemedText style={styles.reviewCount}>
+                  ({product.reviewCount || 0})
+                </ThemedText>
               </View>
-            </>
-          )}
+            </View>
 
-          {/* Seller Info */}
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Seller
-          </ThemedText>
-          <ThemedText style={styles.sellerName}>
-            {product.ownerName || 'Unknown Seller'}
-          </ThemedText>
+            <ThemedText style={styles.description}>
+              {product.description}
+            </ThemedText>
 
-          {/* Action Buttons */}
-          <View style={styles.buttonContainer}>
-            <Button 
-              title="Contact Seller" 
-              variant="secondary" 
-              onPress={handleContactSeller}
-              style={styles.contactButton}
-            />
-            <Button 
-              title={isFavorite ? "In Wishes" : "Add to Wishes"}
-              variant={isFavorite ? "secondary" : "primary"}
-              onPress={handleToggleFavorite}
-            />
+            {/* Size Selection */}
+            {product.sizes && product.sizes.length > 0 && (
+              <>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>
+                  Size
+                </ThemedText>
+                <View style={styles.sizeContainer}>
+                  {product.sizes.map((size: string) => (
+                    <Chip
+                      key={size}
+                      title={size}
+                      selected={selectedSize === size}
+                      onPress={() => setSelectedSize(size)}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
+
+            {/* Seller Info */}
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              Seller
+            </ThemedText>
+            <ThemedText style={styles.sellerName}>
+              {product.ownerName || 'Unknown Seller'}
+            </ThemedText>
+
+            {/* Action Buttons */}
+            <View style={styles.buttonContainer}>
+              <Button 
+                title="Contact Seller" 
+                variant="secondary" 
+                onPress={handleContactSeller}
+                style={styles.contactButton}
+              />
+              <Button 
+                title={isFavorite ? "In Wishes" : "Add to Wishes"}
+                variant={isFavorite ? "secondary" : "primary"}
+                onPress={handleToggleFavorite}
+              />
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </ThemedView>
+        </ScrollView>
+      </ThemedView>
+    </NavWrapper>
   );
 }
 

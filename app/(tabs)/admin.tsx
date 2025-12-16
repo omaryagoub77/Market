@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
 import { Button } from '@/components/ui/button';
 import { ProductCard } from '@/components/ui/product-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -187,82 +188,84 @@ export default function AdminScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        Admin Panel
-      </ThemedText>
-      
-      {/* Reported Items Section */}
-      <ThemedText type="subtitle" style={styles.sectionTitle}>
-        Reported Items
-      </ThemedText>
-      <FlatList
-        data={reportedItems}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={[styles.reportCard, getShadowStyle(Shadows.SOFT)]}>
-            <ThemedText type="defaultSemiBold">{item.itemId || 'Unknown Item'}</ThemedText>
-            <View style={styles.reportDetails}>
-              <ThemedText style={styles.reportReason}>Reason: {item.reason || 'No reason provided'}</ThemedText>
-              <ThemedText style={styles.reportReason}>Reported by: {item.reportedBy || 'Unknown user'}</ThemedText>
+    <NavWrapper>
+      <ThemedView style={styles.container}>
+        <ThemedText type="title" style={styles.title}>
+          Admin Panel
+        </ThemedText>
+        
+        {/* Reported Items Section */}
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Reported Items
+        </ThemedText>
+        <FlatList
+          data={reportedItems}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={[styles.reportCard, getShadowStyle(Shadows.SOFT)]}>
+              <ThemedText type="defaultSemiBold">{item.itemId || 'Unknown Item'}</ThemedText>
+              <View style={styles.reportDetails}>
+                <ThemedText style={styles.reportReason}>Reason: {item.reason || 'No reason provided'}</ThemedText>
+                <ThemedText style={styles.reportReason}>Reported by: {item.reportedBy || 'Unknown user'}</ThemedText>
+              </View>
+              <View style={styles.adminActions}>
+                <Button 
+                  title="Dismiss" 
+                  variant="secondary" 
+                  style={styles.adminButton}
+                  onPress={() => handleDismissReport(item.id)}
+                />
+                <Button 
+                  title="Block User" 
+                  variant="secondary" 
+                  style={styles.adminButton}
+                  onPress={() => handleBlockUser(item.userId, item.id)}
+                />
+                <Button 
+                  title="Delete" 
+                  variant="primary" 
+                  style={styles.adminButton}
+                  onPress={() => handleDeleteReport(item.id, item.itemId)}
+                />
+              </View>
             </View>
-            <View style={styles.adminActions}>
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <ThemedText>No reported items.</ThemedText>
+            </View>
+          }
+        />
+        
+        {/* Blocked Users Section */}
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Blocked Users
+        </ThemedText>
+        <FlatList
+          data={blockedUsers}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={[styles.userCard, getShadowStyle(Shadows.SOFT)]}>
+              <View style={styles.userInfo}>
+                <ThemedText type="defaultSemiBold">{item.name || 'Unknown User'}</ThemedText>
+                <ThemedText style={styles.userEmail}>{item.email || 'No email'}</ThemedText>
+                <ThemedText style={styles.blockReason}>Reason: {item.blockReason || 'No reason provided'}</ThemedText>
+              </View>
               <Button 
-                title="Dismiss" 
+                title="Unblock" 
                 variant="secondary" 
-                style={styles.adminButton}
-                onPress={() => handleDismissReport(item.id)}
-              />
-              <Button 
-                title="Block User" 
-                variant="secondary" 
-                style={styles.adminButton}
-                onPress={() => handleBlockUser(item.userId, item.id)}
-              />
-              <Button 
-                title="Delete" 
-                variant="primary" 
-                style={styles.adminButton}
-                onPress={() => handleDeleteReport(item.id, item.itemId)}
+                onPress={() => handleUnblockUser(item.id)}
               />
             </View>
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <ThemedText>No reported items.</ThemedText>
-          </View>
-        }
-      />
-      
-      {/* Blocked Users Section */}
-      <ThemedText type="subtitle" style={styles.sectionTitle}>
-        Blocked Users
-      </ThemedText>
-      <FlatList
-        data={blockedUsers}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={[styles.userCard, getShadowStyle(Shadows.SOFT)]}>
-            <View style={styles.userInfo}>
-              <ThemedText type="defaultSemiBold">{item.name || 'Unknown User'}</ThemedText>
-              <ThemedText style={styles.userEmail}>{item.email || 'No email'}</ThemedText>
-              <ThemedText style={styles.blockReason}>Reason: {item.blockReason || 'No reason provided'}</ThemedText>
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <ThemedText>No blocked users.</ThemedText>
             </View>
-            <Button 
-              title="Unblock" 
-              variant="secondary" 
-              onPress={() => handleUnblockUser(item.id)}
-            />
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <ThemedText>No blocked users.</ThemedText>
-          </View>
-        }
-      />
-    </ThemedView>
+          }
+        />
+      </ThemedView>
+    </NavWrapper>
   );
 }
 

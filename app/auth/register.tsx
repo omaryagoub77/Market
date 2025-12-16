@@ -58,7 +58,7 @@ export default function RegisterScreen() {
         router.replace(redirectUrl as any);
       } else {
         // Default redirect to home feed
-        router.replace('/(tabs)/home-feed');
+        router.replace('/home-feed');
       }
     } catch (error: any) {
       console.error('Registration error:', error);

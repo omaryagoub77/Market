@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, Alert, ActivityIndicator, Image, Touchabl
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Colors, Spacing, Radii } from '@/src/theme';
@@ -181,93 +182,95 @@ export default function EditProductScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
-        
-        <ThemedText type="title" style={styles.header}>
-          Edit Product
-        </ThemedText>
-        
-        {/* Image Upload Section */}
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Photos
-        </ThemedText>
-        <View style={styles.imageUploadContainer}>
-          {images.map((image, index) => (
-            <View key={index} style={styles.imageContainer}>
-              <Image source={{ uri: image }} style={styles.uploadedImage} />
-              <TouchableOpacity 
-                style={styles.removeButton}
-                onPress={() => handleRemoveImage(index)}
-              >
-                <ThemedText style={styles.removeButtonText}>×</ThemedText>
-              </TouchableOpacity>
-            </View>
-          ))}
-          <TouchableOpacity 
-            style={styles.addImageButton}
-            onPress={handleAddImage}
-            disabled={imageUploading}
-          >
-            <ThemedText style={styles.addImageText}>
-              {imageUploading ? "..." : "+"}
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-        
-        <Input
-          label="Title"
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Enter product title"
-          style={styles.input}
-        />
-        
-        <Input
-          label="Description"
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Enter product description"
-          multiline
-          numberOfLines={4}
-          style={styles.textArea}
-        />
-        
-        <Input
-          label="Price ($)"
-          value={price}
-          onChangeText={setPrice}
-          placeholder="Enter price"
-          keyboardType="numeric"
-          style={styles.input}
-        />
-        
-        <Input
-          label="Category"
-          value={category}
-          onChangeText={setCategory}
-          placeholder="Enter category"
-          style={styles.input}
-        />
-        
-        <View style={styles.buttonContainer}>
-          <Button
-            title={updating ? "Updating..." : "Update Product"}
-            onPress={handleUpdateProduct}
-            disabled={updating}
-            style={styles.updateButton}
+    <NavWrapper>
+      <ThemedView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.contentContainer}>
+          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+          
+          <ThemedText type="title" style={styles.header}>
+            Edit Product
+          </ThemedText>
+          
+          {/* Image Upload Section */}
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Photos
+          </ThemedText>
+          <View style={styles.imageUploadContainer}>
+            {images.map((image, index) => (
+              <View key={index} style={styles.imageContainer}>
+                <Image source={{ uri: image }} style={styles.uploadedImage} />
+                <TouchableOpacity 
+                  style={styles.removeButton}
+                  onPress={() => handleRemoveImage(index)}
+                >
+                  <ThemedText style={styles.removeButtonText}>×</ThemedText>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity 
+              style={styles.addImageButton}
+              onPress={handleAddImage}
+              disabled={imageUploading}
+            >
+              <ThemedText style={styles.addImageText}>
+                {imageUploading ? "..." : "+"}
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+          
+          <Input
+            label="Title"
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Enter product title"
+            style={styles.input}
           />
-          <Button
-            title="Cancel"
-            variant="secondary"
-            onPress={() => router.back()}
-            disabled={updating}
-            style={styles.cancelButton}
+          
+          <Input
+            label="Description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Enter product description"
+            multiline
+            numberOfLines={4}
+            style={styles.textArea}
           />
-        </View>
-      </ScrollView>
-    </ThemedView>
+          
+          <Input
+            label="Price ($)"
+            value={price}
+            onChangeText={setPrice}
+            placeholder="Enter price"
+            keyboardType="numeric"
+            style={styles.input}
+          />
+          
+          <Input
+            label="Category"
+            value={category}
+            onChangeText={setCategory}
+            placeholder="Enter category"
+            style={styles.input}
+          />
+          
+          <View style={styles.buttonContainer}>
+            <Button
+              title={updating ? "Updating..." : "Update Product"}
+              onPress={handleUpdateProduct}
+              disabled={updating}
+              style={styles.updateButton}
+            />
+            <Button
+              title="Cancel"
+              variant="secondary"
+              onPress={() => router.back()}
+              disabled={updating}
+              style={styles.cancelButton}
+            />
+          </View>
+        </ScrollView>
+      </ThemedView>
+    </NavWrapper>
   );
 }
 

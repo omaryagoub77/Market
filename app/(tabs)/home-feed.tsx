@@ -1,19 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  FlatList, 
-  ScrollView, 
-  Dimensions, 
-  Platform, 
-  RefreshControl, 
-  Animated,
-  StatusBar,
-  Pressable
-} from 'react-native';
+import { View, StyleSheet, FlatList, ScrollView, Dimensions, Platform, RefreshControl, StatusBar, Pressable, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import NavWrapper from '@/components/nav-wrapper';
 import { SearchBar } from '@/components/ui/search-bar';
 import { CategoryScroller } from '@/components/ui/category-scroller';
 import { Avatar } from '@/components/ui/avatar';
@@ -25,8 +15,34 @@ import { collection, query, orderBy, limit, onSnapshot, startAfter, DocumentSnap
 import * as Haptics from 'expo-haptics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext'; // Add this import
-import { getUserProfile } from '@/utils/userProfile'; // Add this import
+import { useAuth } from '@/contexts/AuthContext';
+import { getUserProfile } from '@/utils/userProfile';
+
+// Define categories as a single source of truth (same as in post-item.tsx)
+const CATEGORIES = [
+  { id: 'all', name: 'All' },
+  { id: 'electronics', name: 'Electronics' },
+  { id: 'phones-accessories', name: 'Phones & Accessories' },
+  { id: 'computers-laptops', name: 'Computers & Laptops' },
+  { id: 'fashion', name: 'Fashion' },
+  { id: 'shoes', name: 'Shoes' },
+  { id: 'beauty-personal-care', name: 'Beauty & Personal Care' },
+  { id: 'home-furniture', name: 'Home & Furniture' },
+  { id: 'kitchen-appliances', name: 'Kitchen Appliances' },
+  { id: 'groceries', name: 'Groceries' },
+  { id: 'sports-fitness', name: 'Sports & Fitness' },
+  { id: 'vehicles', name: 'Vehicles' },
+  { id: 'vehicle-parts', name: 'Vehicle Parts' },
+  { id: 'real-estate', name: 'Real Estate' },
+  { id: 'jobs', name: 'Jobs' },
+  { id: 'services', name: 'Services' },
+  { id: 'education', name: 'Education' },
+  { id: 'books', name: 'Books' },
+  { id: 'kids-baby', name: 'Kids & Baby' },
+  { id: 'health', name: 'Health' },
+  { id: 'entertainment', name: 'Entertainment' },
+  { id: 'others', name: 'Others' },
+];
 
 // Types
 interface Product {
@@ -35,72 +51,28 @@ interface Product {
   price: number;
   images?: string[];
   createdAt: any;
+  category?: string;
   [key: string]: any;
 }
 
-interface Category {
-  id: string;
-  name: string;
-}
-
-// Helper functions
-const hexToRgb = (hex: string) => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : { r: 0, g: 0, b: 0 };
-};
-
-const generateGradientColors = (seed: string) => {
-  // Create a hash from the seed string
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  
-  // Generate two colors based on the hash
-  const hue1 = Math.abs(hash) % 360;
-  const hue2 = (hue1 + 180) % 360;
-  
-  return {
-    start: `hsl(${hue1}, 70%, 60%)`,
-    end: `hsl(${hue2}, 70%, 60%)`
-  };
-};
-
-// Skeleton Loading Component
-const SkeletonCard = () => {
-  const colorScheme = useColorScheme();
-  const skeletonColor = colorScheme === 'dark' ? '#333333' : '#e0e0e0';
-  const highlightColor = colorScheme === 'dark' ? '#444444' : '#f0f0f0';
-  
-  return (
-    <View style={styles.skeletonCard}>
-      <View style={[styles.skeletonImage, { backgroundColor: skeletonColor }]}>
-        <Animated.View 
-          style={[
-            StyleSheet.absoluteFill, 
-            { 
-              backgroundColor: highlightColor,
-              opacity: 0.5,
-              transform: [{ translateX: -100 }]
-            } 
-          ]} 
-        />
-      </View>
-      <View style={styles.skeletonTextContainer}>
-        <View style={[styles.skeletonLine, { backgroundColor: skeletonColor, width: '80%' }]} />
-        <View style={[styles.skeletonLine, { backgroundColor: skeletonColor, width: '60%' }]} />
-      </View>
-    </View>
-  );
-};
-
 // Gradient Placeholder Component for products without images
-const GradientPlaceholder = ({ productId }: { productId: string }) => {
-  const colors = generateGradientColors(productId);
+const GradientPlaceholder = React.memo(({ productId }: { productId: string }) => {
+  const generateGradientColors = () => {
+    let hash = 0;
+    for (let i = 0; i < productId.length; i++) {
+      hash = productId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    const hue1 = Math.abs(hash) % 360;
+    const hue2 = (hue1 + 180) % 360;
+    
+    return {
+      start: `hsl(${hue1}, 70%, 60%)`,
+      end: `hsl(${hue2}, 70%, 60%)`
+    };
+  };
+  
+  const colors = generateGradientColors();
   
   return (
     <View 
@@ -128,144 +100,33 @@ const GradientPlaceholder = ({ productId }: { productId: string }) => {
       />
     </View>
   );
-};
+});
 
-// Custom Product Card Component
-const ProductCard = ({ 
-  product, 
-  onPress,
-  onHeartPress
-}: { 
-  product: Product; 
-  onPress: () => void;
-  onHeartPress: () => void;
-}) => {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
-  const [scaleValue] = useState(new Animated.Value(1));
-  
-  const handlePressIn = () => {
-    Animated.spring(scaleValue, {
-      toValue: 0.98,
-      useNativeDriver: true,
-      // Use only one set of spring parameters
-      stiffness: 1000,
-      damping: 500,
-      mass: 3,
-    }).start();
-  };
-  
-  const handlePressOut = () => {
-    Animated.spring(scaleValue, {
-      toValue: 1,
-      useNativeDriver: true,
-      // Use only one set of spring parameters
-      stiffness: 1000,
-      damping: 500,
-      mass: 3,
-    }).start();
-  };
-  
-  const toggleLike = () => {
-    setIsLiked(!isLiked);
-    onHeartPress();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
-  
-  const imageUrl = product.images && product.images[0];
-  
-  return (
-    <Animated.View 
-      style={[
-        styles.productCard,
-        { transform: [{ scale: scaleValue }] }
-      ]}
-    >
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        onPress={onPress}
-        style={styles.productImageContainer}
-      >
-        {!imageUrl || imageError ? (
-          <GradientPlaceholder productId={product.id} />
-        ) : !imageLoaded ? (
-          <View style={styles.skeletonImageContainer}>
-            <SkeletonCard />
-          </View>
-        ) : null}
-        
-        {imageUrl && !imageError && (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.productImage}
-            contentFit="cover"
-            onLoad={() => setImageLoaded(true)}
-            onError={() => setImageError(true)}
-          />
-        )}
-      </Pressable>
-      
-      <View style={styles.productInfoContainer}>
-        <ThemedText 
-          type="defaultSemiBold" 
-          style={styles.productTitle} 
-          numberOfLines={2}
-          ellipsizeMode="tail"
-        >
-          {product.name}
-        </ThemedText>
-        <ThemedText style={styles.productPrice}>
-          ${product.price.toFixed(2)}
-        </ThemedText>
-      </View>
-      
-      <Pressable 
-        style={styles.heartButton}
-        onPress={toggleLike}
-      >
-        <IconSymbol 
-          name={isLiked ? "heart.fill" : "heart"} 
-          size={20} 
-          color={isLiked ? "#FF7A00" : ThemeColors.GRAY_LIGHT} 
-        />
-      </Pressable>
-    </Animated.View>
-  );
-};
-
-// Empty State Component
-const EmptyState = () => (
-  <View style={styles.emptyStateContainer}>
-    <View style={styles.slothContainer}>
-      {/* Sloth illustration - simplified for this example */}
-      <IconSymbol 
-        name="questionmark.circle" 
-        size={80} 
-        color={ThemeColors.GRAY_MED} 
-      />
-    </View>
-    <ThemedText type="subtitle" style={styles.emptyStateTitle}>
-      Nothing here yet...
+// No Products Component
+const NoProductsInCategory = React.memo(({ category }: { category: string }) => (
+  <View style={styles.noProductsContainer}>
+    <IconSymbol 
+      name="exclamationmark.triangle" 
+      size={48} 
+      color={ThemeColors.GRAY_MED} 
+    />
+    <ThemedText type="subtitle" style={styles.noProductsTitle}>
+      No products found
     </ThemedText>
-    <ThemedText style={styles.emptyStateDescription}>
-      Be the first to post a product
+    <ThemedText style={styles.noProductsDescription}>
+      There are no products in the "{category}" category yet.
     </ThemedText>
-    <Pressable style={styles.postButton}>
-      <ThemedText style={styles.postButtonText}>Post the first product</ThemedText>
-    </Pressable>
   </View>
-);
+));
 
 // Promo Card Component with Parallax Effect
-const PromoCard = ({ scrollY }: { scrollY: Animated.Value }) => {
+const PromoCard = React.memo(({ scrollY }: { scrollY: Animated.Value }) => {
   const animatedStyle = {
     transform: [
       {
         translateY: scrollY.interpolate({
           inputRange: [0, 100],
-          outputRange: [0, -15], // Move 1.5x slower than scroll
+          outputRange: [0, -15],
           extrapolate: 'clamp',
         }),
       },
@@ -294,7 +155,63 @@ const PromoCard = ({ scrollY }: { scrollY: Animated.Value }) => {
       </View>
     </Animated.View>
   );
-};
+});
+
+// Memoized Product Card Component
+const ProductCard = React.memo(({ 
+  product, 
+  onPress,
+  onHeartPress,
+  onHeartToggle
+}: { 
+  product: Product; 
+  onPress: () => void;
+  onHeartPress: () => void;
+  onHeartToggle: () => void;
+}) => {
+  const [isLiked, setIsLiked] = useState(false);
+  
+  const handleHeartPress = () => {
+    setIsLiked(!isLiked);
+    onHeartToggle();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+  
+  return (
+    <View style={styles.productCard}>
+      <Pressable
+        onPress={onPress}
+        style={styles.productImageContainer}
+      >
+        {product.images && product.images[0] ? (
+          <Image
+            source={{ uri: product.images[0] }}
+            style={styles.productImage}
+            contentFit="cover"
+          />
+        ) : (
+          <GradientPlaceholder productId={product.id} />
+        )}
+        <Pressable 
+          style={styles.heartButton}
+          onPress={handleHeartPress}
+        >
+          <IconSymbol 
+            name={isLiked ? "heart.fill" : "heart"} 
+            size={20} 
+            color={isLiked ? "#FF7A00" : ThemeColors.BG_LIGHT} 
+          />
+        </Pressable>
+      </Pressable>
+      <View style={styles.productInfo}>
+        <ThemedText type="defaultSemiBold" numberOfLines={1} ellipsizeMode="tail">
+          {product.name}
+        </ThemedText>
+        <ThemedText type="subtitle">${product.price.toFixed(2)}</ThemedText>
+      </View>
+    </View>
+  );
+});
 
 export default function HomeFeedScreen() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -307,56 +224,34 @@ export default function HomeFeedScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [notificationCount, setNotificationCount] = useState(3);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
   
   const scrollY = useRef(new Animated.Value(0)).current;
   const colorScheme = useColorScheme();
-  const router = useRouter(); // Initialize router
-  const { user: currentUser } = useAuth(); // Get current user from AuthContext
-  const [userProfile, setUserProfile] = useState<any>(null); // Add user profile state
+  const router = useRouter();
+  const { user: currentUser } = useAuth();
+  const [userProfile, setUserProfile] = useState<any>(null);
   
-  // Calculate number of columns based on screen width
+  // Calculate number of columns based on screen width - 4 on large devices, 2 on small phones
   const numColumns = useMemo(() => {
     const windowWidth = Dimensions.get('window').width;
-    if (windowWidth >= 900) return 4; // Large tablets
-    if (windowWidth >= 600) return 3; // Medium tablets/phones
+    if (windowWidth >= 1024) return 4; // Large devices (desktop/tablets)
+    if (windowWidth >= 768) return 3; // Medium devices (tablets)
     return 2; // Small phones
   }, []);
   
-  // Fetch categories
-  useEffect(() => {
-    const categoriesQuery = query(
-      collection(db, 'categories'),
-      orderBy('name', 'asc')
-    );
-    
-    const unsubscribeCategories = onSnapshot(categoriesQuery, 
-      (snapshot) => {
-        const categoriesData = snapshot.docs.map((doc: QueryDocumentSnapshot) => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Category[];
-        setCategories(categoriesData);
-        if (categoriesData.length > 0 && selectedCategory === null) {
-          setSelectedCategory(categoriesData[0].id);
-        }
-      },
-      (error) => {
-        console.error('Error fetching categories:', error);
-        const mockCategories = [
-          { id: '1', name: 'Electronics' },
-          { id: '2', name: 'Clothing' },
-          { id: '3', name: 'Home' },
-          { id: '4', name: 'Books' },
-          { id: '5', name: 'Sports' },
-        ];
-        setCategories(mockCategories);
-      }
-    );
-    
-    return () => unsubscribeCategories();
-  }, []);
+  // Filter products based on selected category
+  const filteredProducts = useMemo(() => {
+    if (selectedCategory === 'all') {
+      return products;
+    }
+    return products.filter(product => product.category === selectedCategory);
+  }, [products, selectedCategory]);
+  
+  // Check if there are products in the current category
+  const hasProductsInCategory = useMemo(() => {
+    return filteredProducts.length > 0;
+  }, [filteredProducts]);
   
   // Fetch products
   const fetchProducts = useCallback(async (isRefresh = false) => {
@@ -447,14 +342,18 @@ export default function HomeFeedScreen() {
   
   // Handle product press
   const handleProductPress = useCallback((productId: string) => {
-    console.log('Product pressed:', productId);
-    // Navigate to product detail screen with productId as parameter
     router.push({
-      pathname: "/product-detail",
+      pathname: "/screens/product-detail",
       params: { productId: productId }
     });
   }, [router]);
 
+  // Handle category selection with animation
+  const handleCategorySelect = useCallback((categoryId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedCategory(categoryId);
+  }, []);
+  
   // Render item for FlatList
   const renderItem = useCallback(({ item }: { item: Product }) => (
     <View style={[styles.productItem, { width: `${100 / numColumns}%` }]}>
@@ -462,6 +361,7 @@ export default function HomeFeedScreen() {
         product={item} 
         onPress={() => handleProductPress(item.id)}
         onHeartPress={handleHeartPress}
+        onHeartToggle={() => handleHeartPress()}
       />
     </View>
   ), [numColumns, handleProductPress, handleHeartPress]);
@@ -476,8 +376,8 @@ export default function HomeFeedScreen() {
   
   // List empty component
   const listEmptyComponent = useMemo(() => 
-    loading ? null : <EmptyState />, 
-  [loading]);
+    loading ? null : hasProductsInCategory ? null : <NoProductsInCategory category={selectedCategory === 'all' ? 'All' : CATEGORIES.find(c => c.id === selectedCategory)?.name || selectedCategory} />,
+  [loading, hasProductsInCategory, selectedCategory]);
   
   // Status bar color based on theme
   useEffect(() => {
@@ -488,7 +388,6 @@ export default function HomeFeedScreen() {
   useEffect(() => {
     if (!currentUser) return;
     
-    // Listen for user profile updates in real-time
     const userDocRef = doc(db, 'users', currentUser.uid);
     const unsubscribe = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
@@ -505,7 +404,6 @@ export default function HomeFeedScreen() {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.loadingContainer}>
-          {/* Custom spinner to match brand color */}
           <Animated.View 
             style={[
               styles.spinner,
@@ -532,102 +430,107 @@ export default function HomeFeedScreen() {
   }
   
   return (
-    <ThemedView style={styles.container}>
-      <Animated.ScrollView 
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#FF7A00"
-            colors={['#FF7A00', '#FFAA00']}
-          />
-        }
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          {/* Dynamic Avatar with Navigation */}
-          <Pressable onPress={() => router.push('/profile')}>
-            <Avatar 
-              source={userProfile?.photoURL || currentUser?.photoURL || "https://picsum.photos/200/200?random=7"} 
-              size={56} 
-              showRing={true} 
+    <NavWrapper>
+      <ThemedView style={styles.container}>
+        <Animated.ScrollView 
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true }
+          )}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#FF7A00"
+              colors={['#FF7A00', '#FFAA00']}
             />
-          </Pressable>
-          
-          <View style={styles.headerRight}>
-            <View style={styles.notificationContainer}>
-              <IconSymbol name="bell.fill" size={24} color={ThemeColors.ICON} />
-              <Badge count={notificationCount} />
+          }
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <Pressable onPress={() => router.push('/profile')}>
+              <Avatar 
+                source={userProfile?.photoURL || currentUser?.photoURL || "https://picsum.photos/200/200?random=7"} 
+                size={56} 
+                showRing={true} 
+              />
+            </Pressable>
+            
+            <View style={styles.headerRight}>
+              <View style={styles.notificationContainer}>
+                <IconSymbol name="bell.fill" size={24} color={ThemeColors.ICON} />
+                <Badge count={notificationCount} />
+              </View>
             </View>
           </View>
-        </View>
-        
-        {/* Welcome Text */}
-        <ThemedText type="title" style={styles.welcomeText}>
-          Welcome back!
-        </ThemedText>
-        
-        {/* Search Bar */}
-        <SearchBar 
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search products..."
-        />
-        
-        {/* Promo Card with Parallax */}
-        <PromoCard scrollY={scrollY} />
-        
-        {/* Categories */}
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Categories
-        </ThemedText>
-        <CategoryScroller 
-          categories={categories}
-          selectedCategory={selectedCategory as string}
-          onSelectCategory={(categoryId) => setSelectedCategory(categoryId)}
-        />
-        
-        {/* Products Grid */}
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Products
-        </ThemedText>
-        <FlatList
-          data={products}
-          keyExtractor={keyExtractor}
-          numColumns={numColumns}
-          columnWrapperStyle={columnWrapperStyle}
-          contentContainerStyle={styles.productsGrid}
-          renderItem={renderItem}
-          ListEmptyComponent={listEmptyComponent}
-          scrollEnabled={false} // Already inside ScrollView
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            loadingMore ? (
-              <View style={styles.loadingMoreContainer}>
-                <Animated.View 
-                  style={[
-                    styles.smallSpinner,
-                    {
-                      borderColor: '#FF7A00',
-                      borderTopColor: 'transparent',
-                    }
-                  ]}
-                />
-              </View>
-            ) : null
-          }
-        />
-      </Animated.ScrollView>
-    </ThemedView>
+          
+          {/* Welcome Text */}
+          <ThemedText type="title" style={styles.welcomeText}>
+            Welcome back!
+          </ThemedText>
+          
+          {/* Search Bar */}
+          <SearchBar 
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search products..."
+          />
+          
+          {/* Promo Card with Parallax */}
+          <PromoCard scrollY={scrollY} />
+          
+          {/* Categories */}
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Categories
+          </ThemedText>
+          <CategoryScroller 
+            categories={CATEGORIES}
+            selectedCategory={selectedCategory}
+            onSelectCategory={handleCategorySelect}
+          />
+          
+          {/* Products Grid */}
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            {selectedCategory === 'all' ? 'All Products' : `${CATEGORIES.find(c => c.id === selectedCategory)?.name || selectedCategory} Products`}
+          </ThemedText>
+          <FlatList
+            data={filteredProducts}
+            keyExtractor={keyExtractor}
+            numColumns={numColumns}
+            columnWrapperStyle={columnWrapperStyle}
+            contentContainerStyle={styles.productsGrid}
+            renderItem={renderItem}
+            ListEmptyComponent={listEmptyComponent}
+            scrollEnabled={false}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={styles.loadingMoreContainer}>
+                  <Animated.View 
+                    style={[
+                      styles.smallSpinner,
+                      {
+                        borderColor: '#FF7A00',
+                        borderTopColor: 'transparent',
+                      }
+                    ]}
+                  />
+                </View>
+              ) : null
+            }
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
+          />
+        </Animated.ScrollView>
+      </ThemedView>
+    </NavWrapper>
   );
 }
 
@@ -641,38 +544,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.SCREEN_PADDING,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  spinner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 3,
-    marginBottom: Spacing.LIST_GAP,
-    transform: [{ rotate: '0deg' }],
-  },
-  smallSpinner: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-  },
-  loadingText: {
-    color: ThemeColors.GRAY_MED,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.SCREEN_PADDING,
-  },
-  errorText: {
-    color: ThemeColors.ALERT_RED,
-    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -688,52 +559,39 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   welcomeText: {
-    marginBottom: Spacing.COMPONENT,
+    marginBottom: Spacing.LIST_GAP,
+  },
+  sectionTitle: {
+    marginTop: Spacing.SECTION_GAP,
+    marginBottom: Spacing.LIST_GAP,
   },
   promoCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF5EB', // Warm terracotta background
+    backgroundColor: '#FF7A00',
     borderRadius: Radii.CARD,
     padding: Spacing.COMPONENT,
-    marginBottom: Spacing.SECTION_GAP,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
-      },
-    }),
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    ...Shadows.MED,
+    minHeight: 120,
   },
   promoContent: {
     flex: 1,
   },
   promoTitle: {
+    color: ThemeColors.BG_LIGHT,
     marginBottom: Spacing.LIST_GAP,
-    color: '#1A1A1A',
   },
   promoSubtitle: {
-    color: ThemeColors.GRAY_MED,
+    color: ThemeColors.BG_LIGHT,
     marginBottom: Spacing.LIST_GAP,
   },
   promoDescription: {
-    color: '#FF7A00',
-    fontWeight: '600',
+    color: ThemeColors.BG_LIGHT,
+    opacity: 0.9,
   },
   promoImageContainer: {
-    width: '40%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sectionTitle: {
-    marginTop: Spacing.SECTION_GAP,
-    marginBottom: Spacing.LIST_GAP,
+    marginLeft: Spacing.COMPONENT,
   },
   productsGrid: {
     paddingBottom: Spacing.SECTION_GAP,
@@ -744,141 +602,90 @@ const styles = StyleSheet.create({
   productItem: {
     marginBottom: Spacing.LIST_GAP,
   },
-  // Product Card Styles
   productCard: {
     backgroundColor: ThemeColors.BG_LIGHT,
-    borderRadius: 20,
+    borderRadius: Radii.CARD,
     overflow: 'hidden',
-    position: 'relative',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
-      },
-    }),
+    ...Shadows.SOFT,
   },
   productImageContainer: {
-    height: 165, // 75% of 220dp
-    backgroundColor: ThemeColors.GRAY_LIGHT,
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: 'relative',
   },
   productImage: {
     width: '100%',
-    height: '100%',
-    borderRadius: 20, // Match card border radius
-  },
-  skeletonImageContainer: {
-    width: '100%',
-    height: '100%',
+    height: 180,
   },
   gradientPlaceholder: {
     width: '100%',
-    height: '100%',
+    height: 180,
     justifyContent: 'center',
     alignItems: 'center',
   },
   placeholderIcon: {
     opacity: 0.7,
   },
-  productInfoContainer: {
-    padding: Spacing.LIST_GAP,
-    height: 55, // 25% of 220dp
-    justifyContent: 'center',
-  },
-  productTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: ThemeColors.TEXT,
-    marginBottom: 4,
-  },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FF7A00',
-  },
   heartButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 16,
-    padding: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-      },
-    }),
-  },
-  // Skeleton Styles
-  skeletonCard: {
-    width: '100%',
-    height: 220,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  skeletonImage: {
-    height: 165, // Match product image height
-    width: '100%',
-  },
-  skeletonTextContainer: {
-    padding: Spacing.LIST_GAP,
-    height: 55, // Match product info container height
+    top: Spacing.LIST_GAP,
+    right: Spacing.LIST_GAP,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    width: 32,
+    height: 32,
+    borderRadius: Radii.CIRCLE,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  skeletonLine: {
-    height: 12,
-    borderRadius: 6,
-    marginBottom: 8,
+  productInfo: {
+    padding: Spacing.LIST_GAP,
   },
-  // Empty State Styles
-  emptyStateContainer: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 80,
-    paddingBottom: 80,
   },
-  slothContainer: {
-    marginBottom: Spacing.SECTION_GAP,
-  },
-  emptyStateTitle: {
+  spinner: {
+    width: 40,
+    height: 40,
+    borderRadius: Radii.CIRCLE,
+    borderWidth: 3,
     marginBottom: Spacing.LIST_GAP,
+  },
+  loadingText: {
     color: ThemeColors.GRAY_MED,
-  },
-  emptyStateDescription: {
-    marginBottom: Spacing.SECTION_GAP,
-    color: ThemeColors.GRAY_MED,
-  },
-  postButton: {
-    backgroundColor: '#FF7A00',
-    paddingHorizontal: Spacing.COMPONENT,
-    paddingVertical: Spacing.LIST_GAP,
-    borderRadius: Radii.BUTTON,
-  },
-  postButtonText: {
-    color: ThemeColors.BG_LIGHT,
-    fontWeight: '600',
   },
   loadingMoreContainer: {
     paddingVertical: Spacing.LIST_GAP,
     alignItems: 'center',
+  },
+  smallSpinner: {
+    width: 24,
+    height: 24,
+    borderRadius: Radii.CIRCLE,
+    borderWidth: 2,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.SCREEN_PADDING,
+  },
+  errorText: {
+    color: ThemeColors.ALERT_RED,
+    textAlign: 'center',
+  },
+  noProductsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noProductsTitle: {
+    marginTop: Spacing.COMPONENT,
+    marginBottom: Spacing.LIST_GAP,
+  },
+  noProductsDescription: {
+    color: ThemeColors.GRAY_MED,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.SCREEN_PADDING,
   },
 });

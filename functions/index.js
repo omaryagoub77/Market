@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const axios = require('axios');
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -58,61 +59,140 @@ exports.sendNewMessageNotification = functions.firestore
         }
       };
       
-      // Collect FCM tokens for all other participants
-      const tokensPromises = otherParticipants.map(async (participantId) => {
-        try {
-          const userDoc = await admin.firestore().doc(`users/${participantId}`).get();
-          if (userDoc.exists) {
-            const userData = userDoc.data();
-            // Return array of FCM tokens for this user
-            return userData.fcmTokens || [];
-          }
-          return [];
-        } catch (error) {
-          console.error('Error fetching user data for participant:', participantId, error);
-          return [];
-        }
-      });
+      // Send notifications to FCM tokens (existing functionality)
+      await sendFCMNotifications(otherParticipants, notificationPayload);
       
-      // Wait for all token fetches to complete
-      const tokensArrays = await Promise.all(tokensPromises);
+      // Send notifications to Expo tokens (new functionality)
+      await sendExpoNotifications(otherParticipants, notificationPayload, messageData.text, senderName);
       
-      // Flatten the arrays of tokens into a single array
-      const allTokens = tokensArrays.flat().filter(token => token); // Remove any falsy values
-      
-      if (allTokens.length === 0) {
-        console.log('No FCM tokens found for participants');
-        return null;
-      }
-      
-      console.log(`Sending notifications to ${allTokens.length} devices`);
-      
-      // Send multicast notification
-      const response = await admin.messaging().sendMulticast({
-        tokens: allTokens,
-        ...notificationPayload
-      });
-      
-      // Log results
-      console.log('Notification sent successfully:', response.successCount, 'success,', response.failureCount, 'failures');
-      
-      // Clean up invalid tokens if any failed
-      if (response.failureCount > 0) {
-        const failedTokens = [];
-        response.responses.forEach((resp, idx) => {
-          if (!resp.success) {
-            failedTokens.push(allTokens[idx]);
-            console.error('Failed to send notification to token:', allTokens[idx], resp.error);
-          }
-        });
-        
-        // TODO: Remove invalid tokens from user documents if needed
-        // This would require additional logic to identify which user each token belongs to
-      }
-      
-      return response;
+      return { success: true };
     } catch (error) {
       console.error('Error in sendNewMessageNotification function:', error);
       return null;
     }
   });
+
+/**
+ * Send notifications via FCM (existing functionality)
+ */
+async function sendFCMNotifications(participants, notificationPayload) {
+  try {
+    // Collect FCM tokens for all participants
+    const tokensPromises = participants.map(async (participantId) => {
+      try {
+        const userDoc = await admin.firestore().doc(`users/${participantId}`).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          // Return array of FCM tokens for this user
+          return userData.fcmTokens || [];
+        }
+        return [];
+      } catch (error) {
+        console.error('Error fetching user data for participant:', participantId, error);
+        return [];
+      }
+    });
+    
+    // Wait for all token fetches to complete
+    const tokensArrays = await Promise.all(tokensPromises);
+    
+    // Flatten the arrays of tokens into a single array
+    const allTokens = tokensArrays.flat().filter(token => token); // Remove any falsy values
+    
+    if (allTokens.length === 0) {
+      console.log('No FCM tokens found for participants');
+      return null;
+    }
+    
+    console.log(`Sending FCM notifications to ${allTokens.length} devices`);
+    
+    // Send multicast notification
+    const response = await admin.messaging().sendMulticast({
+      tokens: allTokens,
+      ...notificationPayload
+    });
+    
+    // Log results
+    console.log('FCM Notification sent successfully:', response.successCount, 'success,', response.failureCount, 'failures');
+    
+    // Clean up invalid tokens if any failed
+    if (response.failureCount > 0) {
+      const failedTokens = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          failedTokens.push(allTokens[idx]);
+          console.error('Failed to send FCM notification to token:', allTokens[idx], resp.error);
+        }
+      });
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Error sending FCM notifications:', error);
+    return null;
+  }
+}
+
+/**
+ * Send notifications via Expo Push API
+ */
+async function sendExpoNotifications(participants, notificationPayload, messageText, senderName) {
+  try {
+    // Collect Expo tokens for all participants
+    const tokensPromises = participants.map(async (participantId) => {
+      try {
+        const userDoc = await admin.firestore().doc(`users/${participantId}`).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          // Return array of Expo tokens for this user
+          return userData.expoTokens || [];
+        }
+        return [];
+      } catch (error) {
+        console.error('Error fetching user data for participant:', participantId, error);
+        return [];
+      }
+    });
+    
+    // Wait for all token fetches to complete
+    const tokensArrays = await Promise.all(tokensPromises);
+    
+    // Flatten the arrays of tokens into a single array
+    const allTokens = tokensArrays.flat().filter(token => token); // Remove any falsy values
+    
+    if (allTokens.length === 0) {
+      console.log('No Expo tokens found for participants');
+      return null;
+    }
+    
+    console.log(`Sending Expo notifications to ${allTokens.length} devices`);
+    
+    // Prepare Expo notifications
+    const expoNotifications = allTokens.map(token => ({
+      to: token,
+      sound: 'default',
+      title: notificationPayload.notification.title,
+      body: messageText,
+      data: notificationPayload.data
+    }));
+    
+    // Send notifications via Expo Push API
+    const responses = await Promise.all(
+      expoNotifications.map(notification => 
+        axios.post('https://exp.host/--/api/v2/push/send', notification)
+          .catch(error => {
+            console.error('Error sending Expo notification:', error.message);
+            return null;
+          })
+      )
+    );
+    
+    const successfulResponses = responses.filter(response => response !== null);
+    console.log('Expo notifications sent successfully:', successfulResponses.length);
+    
+    return successfulResponses;
+  } catch (error) {
+    console.error('Error sending Expo notifications:', error);
+    return null;
+  }
+}
